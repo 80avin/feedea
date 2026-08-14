@@ -21,7 +21,7 @@ async fn health_returns_ok_with_version() {
     };
     let engine = Engine::new(&cfg).await.unwrap();
     let app_db = Arc::new(Mutex::new(app_db::open(&cfg.data_dir).unwrap()));
-    let app = rssea::api::router(AppState { engine, app_db });
+    let app = rssea::api::router(AppState { engine, app_db, allow_private_proxy: false });
     let response = app
         .oneshot(
             Request::builder()

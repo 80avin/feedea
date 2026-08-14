@@ -1,17 +1,12 @@
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, Ordering};
 
-use axum::extract::Query;
+use axum::extract::{Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
-static ALLOW_PRIVATE_PROXY: AtomicBool = AtomicBool::new(false);
-
-pub fn set_allow_private_proxy(allow: bool) {
-    ALLOW_PRIVATE_PROXY.store(allow, Ordering::Relaxed);
-}
+use crate::AppState;
 
 static PROXY_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
@@ -29,7 +24,10 @@ pub struct ImgParams {
     pub u: Option<String>,
 }
 
-pub async fn proxy_image(Query(params): Query<ImgParams>) -> Response {
+pub async fn proxy_image(
+    State(state): State<AppState>,
+    Query(params): Query<ImgParams>,
+) -> Response {
     let Some(u) = params.u else {
         return (StatusCode::BAD_REQUEST, "missing u").into_response();
     };
@@ -39,7 +37,7 @@ pub async fn proxy_image(Query(params): Query<ImgParams>) -> Response {
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
         return (StatusCode::BAD_REQUEST, "only http/https allowed").into_response();
     }
-    if !ALLOW_PRIVATE_PROXY.load(Ordering::Relaxed) && check_ssrf(&parsed).await.is_err() {
+    if !state.allow_private_proxy && check_ssrf(&parsed).await.is_err() {
         return (StatusCode::BAD_GATEWAY, "blocked target").into_response();
     }
     match proxy_client().get(parsed.as_str()).send().await {
@@ -75,14 +73,47 @@ async fn check_ssrf(parsed: &url::Url) -> Result<(), ()> {
     Ok(())
 }
 
+fn is_v4_reserved(addr: Ipv4Addr) -> bool {
+    addr.octets()[0] >= 240
+}
+
+fn is_v6_reserved(addr: Ipv6Addr) -> bool {
+    let segments = addr.segments();
+    segments[0] < 0x100 || (segments[0] & 0xFFC0) == 0xFEC0
+}
+
+fn is_v6_documentation(addr: Ipv6Addr) -> bool {
+    let segments = addr.segments();
+    segments[0] == 0x2001 && segments[1] == 0x0db8
+}
+
 fn is_blocked_ip(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(v4) => v4.is_private() || v4.is_loopback() || v4.is_link_local(),
+        IpAddr::V4(v4) => {
+            v4.is_private()
+                || v4.is_loopback()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || is_v4_reserved(v4)
+                || v4.is_documentation()
+        }
         IpAddr::V6(v6) => {
             if let Some(v4) = v6.to_ipv4_mapped() {
-                return v4.is_private() || v4.is_loopback() || v4.is_link_local();
+                return v4.is_private()
+                    || v4.is_loopback()
+                    || v4.is_link_local()
+                    || v4.is_unspecified()
+                    || v4.is_broadcast()
+                    || is_v4_reserved(v4)
+                    || v4.is_documentation();
             }
-            v6.is_loopback() || v6.is_unique_local() || v6.is_unicast_link_local()
+            v6.is_loopback()
+                || v6.is_unique_local()
+                || v6.is_unicast_link_local()
+                || v6.is_unspecified()
+                || is_v6_reserved(v6)
+                || is_v6_documentation(v6)
         }
     }
 }
@@ -124,5 +155,21 @@ mod tests {
             assert!(is_blocked_ip(ip.parse().unwrap()), "{ip} should be blocked");
         }
         assert!(!is_blocked_ip("::ffff:8.8.8.8".parse().unwrap()));
+    }
+
+    #[test]
+    fn blocks_unspecified_reserved_broadcast_and_documentation() {
+        for ip in [
+            "0.0.0.0",
+            "::",
+            "255.255.255.255",
+            "240.0.0.1",
+            "192.0.2.1",
+            "2001:db8::1",
+            "::ffff:0.0.0.0",
+            "::ffff:192.0.2.1",
+        ] {
+            assert!(is_blocked_ip(ip.parse().unwrap()), "{ip} should be blocked");
+        }
     }
 }

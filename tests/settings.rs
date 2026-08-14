@@ -26,7 +26,7 @@ async fn spawn_app() -> axum::Router {
     let mut db = app_db::open(&config.data_dir).unwrap();
     db.set_password_hash(&auth::hash_password("test-pass").unwrap()).unwrap();
     let app_db = Arc::new(Mutex::new(db));
-    api::router(AppState { engine, app_db })
+    api::router(AppState { engine, app_db, allow_private_proxy: false })
 }
 
 async fn login_cookie(app: &axum::Router) -> String {

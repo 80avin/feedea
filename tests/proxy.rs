@@ -90,8 +90,7 @@ fn url_encode(s: &str) -> String {
     out
 }
 
-async fn spawn_app() -> axum::Router {
-    rssea::proxy::set_allow_private_proxy(true);
+async fn spawn_app(allow_private_proxy: bool) -> axum::Router {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
         "rssea-proxy-test-{}-{}",
@@ -103,13 +102,13 @@ async fn spawn_app() -> axum::Router {
     let engine = Engine::new(&config).await.unwrap();
     let db = app_db::open(&config.data_dir).unwrap();
     let app_db = Arc::new(Mutex::new(db));
-    api::router(AppState { engine: engine.clone(), app_db: app_db.clone() })
+    api::router(AppState { engine: engine.clone(), app_db: app_db.clone(), allow_private_proxy })
 }
 
 #[tokio::test]
 async fn proxy_serves_upstream_image_bytes() {
     let server = ByteServer::start(PNG);
-    let app = spawn_app().await;
+    let app = spawn_app(true).await;
     let uri = format!("/img?u={}", url_encode(&server.url));
     let resp = app.clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
@@ -123,7 +122,7 @@ async fn proxy_serves_upstream_image_bytes() {
 
 #[tokio::test]
 async fn proxy_rejects_non_http_scheme() {
-    let app = spawn_app().await;
+    let app = spawn_app(false).await;
     let uri = format!("/img?u={}", url_encode("ftp://example.com/img.png"));
     let resp = app.clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
@@ -134,7 +133,7 @@ async fn proxy_rejects_non_http_scheme() {
 
 #[tokio::test]
 async fn proxy_rejects_missing_u() {
-    let app = spawn_app().await;
+    let app = spawn_app(false).await;
     let resp = app.clone()
         .oneshot(Request::builder().uri("/img").body(Body::empty()).unwrap())
         .await
@@ -145,7 +144,7 @@ async fn proxy_rejects_missing_u() {
 #[tokio::test]
 async fn proxy_upstream_404_is_502() {
     let server = ByteServer::start_with_status(PNG, 404);
-    let app = spawn_app().await;
+    let app = spawn_app(true).await;
     let uri = format!("/img?u={}", url_encode(&server.url));
     let resp = app.clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
@@ -156,8 +155,20 @@ async fn proxy_upstream_404_is_502() {
 
 #[tokio::test]
 async fn proxy_unreachable_upstream_is_502() {
-    let app = spawn_app().await;
+    let app = spawn_app(true).await;
     let uri = format!("/img?u={}", url_encode("http://127.0.0.1:1/nope.png"));
+    let resp = app.clone()
+        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
+async fn proxy_rejects_private_target() {
+    let server = ByteServer::start(PNG);
+    let app = spawn_app(false).await;
+    let uri = format!("/img?u={}", url_encode(&server.url));
     let resp = app.clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
         .await

@@ -104,7 +104,7 @@ mod tests {
         let config = Config { data_dir: dir.clone(), host: "127.0.0.1".into(), port: 0 };
         let engine = Engine::new(&config).await.unwrap();
         let app_db = Arc::new(Mutex::new(app_db::open(&dir).unwrap()));
-        let state = AppState { engine, app_db: app_db.clone() };
+        let state = AppState { engine, app_db: app_db.clone(), allow_private_proxy: false };
         ensure_password_setup(&state).await.unwrap();
         ensure_password_setup(&state).await.unwrap();
         assert!(app_db.lock().await.password_hash().unwrap().is_some());

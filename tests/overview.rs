@@ -53,7 +53,7 @@ async fn spawn_app() -> (String, axum::Router, feed_server::FeedServer) {
     let mut db = app_db::open(&config.data_dir).unwrap();
     db.set_password_hash(&auth::hash_password("test-pass").unwrap()).unwrap();
     let app_db = Arc::new(Mutex::new(db));
-    let router = api::router(AppState { engine: engine.clone(), app_db });
+    let router = api::router(AppState { engine: engine.clone(), app_db, allow_private_proxy: false });
     (server.url.clone(), router, server)
 }
 
