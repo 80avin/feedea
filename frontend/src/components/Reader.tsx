@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { ChevronLeftIcon } from "@heroicons/react/24/outline";
 import ArticleHtml from "./ArticleHtml";
@@ -6,8 +6,10 @@ import Feedback from "./Feedback";
 import ReaderActions from "./ReaderActions";
 import SaveDialog from "./SaveDialog";
 import { useSelectedArticleId } from "../hooks/useSelectedArticleId";
-import { useArticle } from "../state/hooks";
+import { useArticle, useMarkRead } from "../state/hooks";
 import { formatAge } from "../utils/format";
+
+const autoMarkedReadIds = new Set<string>();
 
 function hostOf(url: string): string {
   try {
@@ -21,7 +23,15 @@ export default function Reader() {
   const id = useSelectedArticleId();
   const navigate = useNavigate();
   const { data, isLoading, isError, error, refetch } = useArticle(id ?? "");
+  const markRead = useMarkRead();
   const [saveOpen, setSaveOpen] = useState(false);
+
+  useEffect(() => {
+    if (id && data && data.unread && !autoMarkedReadIds.has(id)) {
+      autoMarkedReadIds.add(id);
+      markRead.mutate({ id, read: true });
+    }
+  }, [id, data, markRead]);
 
   const goBack = () => {
     if (window.history.state?.idx && window.history.state.idx > 0) {
@@ -86,6 +96,12 @@ export default function Reader() {
 
       <div className="mt-4 min-h-0 flex-1 px-4 pb-4">
         <ArticleHtml html={data.html} summary={data.summary} plainText={data.plain_text} />
+        {data.note && (
+          <div className="mt-6 rounded-lg border border-accent/30 bg-accent-soft p-4" data-reader-note>
+            <p className="text-xs font-semibold uppercase tracking-wider text-accent-soft-foreground">Note</p>
+            <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-app-text-2">{data.note}</p>
+          </div>
+        )}
       </div>
 
       <div
