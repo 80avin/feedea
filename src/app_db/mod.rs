@@ -82,7 +82,8 @@ impl AppDb {
     pub fn save_article(&mut self, article_id: &str, note: Option<&str>, tags: &[String]) -> anyhow::Result<()> {
         let now = chrono::Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT OR REPLACE INTO saved (article_id, saved_at, note, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO saved (article_id, saved_at, note, updated_at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(article_id) DO UPDATE SET note = excluded.note, updated_at = excluded.updated_at",
             rusqlite::params![article_id, now, note, now],
         )?;
         self.conn.execute("DELETE FROM saved_tags WHERE article_id = ?1", rusqlite::params![article_id])?;
@@ -90,6 +91,15 @@ impl AppDb {
             self.conn.execute("INSERT OR IGNORE INTO tags (tag) VALUES (?1)", rusqlite::params![tag])?;
             self.conn.execute("INSERT OR REPLACE INTO saved_tags (article_id, tag) VALUES (?1, ?2)", rusqlite::params![article_id, tag])?;
         }
+        Ok(())
+    }
+
+    pub fn ensure_saved(&mut self, article_id: &str) -> anyhow::Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT OR IGNORE INTO saved (article_id, saved_at, note, updated_at) VALUES (?1, ?2, NULL, ?2)",
+            rusqlite::params![article_id, now],
+        )?;
         Ok(())
     }
 
@@ -111,7 +121,11 @@ impl AppDb {
     }
 
     pub fn note_and_tags(&self, article_id: &str) -> anyhow::Result<(Option<String>, Vec<String>)> {
-        let note: Option<String> = self.conn.query_row("SELECT note FROM saved WHERE article_id = ?1", rusqlite::params![article_id], |r| r.get(0)).unwrap_or(None);
+        let note: Option<String> = match self.conn.query_row("SELECT note FROM saved WHERE article_id = ?1", rusqlite::params![article_id], |r| r.get(0)) {
+            Ok(note) => note,
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e.into()),
+        };
         let mut stmt = self.conn.prepare("SELECT tag FROM saved_tags WHERE article_id = ?1 ORDER BY tag")?;
         let mut rows = stmt.query(rusqlite::params![article_id])?;
         let mut tags = Vec::new();
@@ -190,6 +204,50 @@ mod tests {
         assert_eq!(db.password_hash().unwrap(), None);
         db.set_password_hash("argon2hash").unwrap();
         assert_eq!(db.password_hash().unwrap(), Some("argon2hash".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ensure_saved_keeps_existing_row_intact() {
+        let dir = tmp_dir();
+        let mut db = open(&dir).unwrap();
+        let id = "article-1";
+        let now = chrono::Utc::now().to_rfc3339();
+        db.save_article(id, Some("keep me"), &["tag1".to_string()]).unwrap();
+        let original_saved_at: String = db.conn
+            .query_row("SELECT saved_at FROM saved WHERE article_id = ?1", rusqlite::params![id], |r| r.get(0))
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        db.ensure_saved(id).unwrap();
+        let (note, tags) = db.note_and_tags(id).unwrap();
+        assert_eq!(note.as_deref(), Some("keep me"));
+        assert_eq!(tags, vec!["tag1".to_string()]);
+        let saved_at: String = db.conn
+            .query_row("SELECT saved_at FROM saved WHERE article_id = ?1", rusqlite::params![id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(saved_at, original_saved_at);
+        assert_ne!(now, saved_at);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_article_preserves_saved_at_on_edit() {
+        let dir = tmp_dir();
+        let mut db = open(&dir).unwrap();
+        let id = "article-2";
+        db.save_article(id, Some("note"), &["a".to_string()]).unwrap();
+        let original_saved_at: String = db.conn
+            .query_row("SELECT saved_at FROM saved WHERE article_id = ?1", rusqlite::params![id], |r| r.get(0))
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        db.save_article(id, Some("edited"), &["b".to_string()]).unwrap();
+        let saved_at: String = db.conn
+            .query_row("SELECT saved_at FROM saved WHERE article_id = ?1", rusqlite::params![id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(saved_at, original_saved_at, "saved_at must survive an edit");
+        let (note, tags) = db.note_and_tags(id).unwrap();
+        assert_eq!(note.as_deref(), Some("edited"));
+        assert_eq!(tags, vec!["b".to_string()]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

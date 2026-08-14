@@ -101,7 +101,7 @@ mod tests {
     async fn ensure_password_setup_is_idempotent() {
         let dir = std::env::temp_dir().join(format!("rssea-auth-unit-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let config = Config { data_dir: dir.clone(), host: "127.0.0.1".into(), port: 0 };
+        let config = Config { data_dir: dir.clone(), host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
         let engine = Engine::new(&config).await.unwrap();
         let app_db = Arc::new(Mutex::new(app_db::open(&dir).unwrap()));
         let state = AppState { engine, app_db: app_db.clone(), allow_private_proxy: false };

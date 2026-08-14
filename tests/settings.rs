@@ -21,7 +21,7 @@ async fn spawn_app() -> axum::Router {
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
+    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
     let engine = Engine::new(&config).await.unwrap();
     let mut db = app_db::open(&config.data_dir).unwrap();
     db.set_password_hash(&auth::hash_password("test-pass").unwrap()).unwrap();
@@ -105,6 +105,12 @@ async fn settings_defaults_and_patch_roundtrip() {
     let resp = patch_settings(&app, &cookie, r#"{"keep_articles_days":null}"#).await;
     assert_eq!(resp.status(), StatusCode::OK);
     assert!(get_settings(&app, &cookie).await["keep_articles_days"].is_null(), "null keep_articles_days keeps everything");
+
+    let resp = patch_settings(&app, &cookie, r#"{"sync_interval_minutes":0}"#).await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let resp = patch_settings(&app, &cookie, r#"{"sync_interval_minutes":-5}"#).await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(get_settings(&app, &cookie).await["sync_interval_minutes"].as_i64(), Some(15));
 }
 
 #[tokio::test]

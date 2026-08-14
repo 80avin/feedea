@@ -68,6 +68,38 @@ impl ByteServer {
         });
         ByteServer { url, stop, handle: Some(handle) }
     }
+
+    fn start_huge_content_length() -> ByteServer {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let url = format!("http://{addr}/img.png");
+        let stop = Arc::new(AtomicBool::new(false));
+        let thread_stop = stop.clone();
+        let handle = thread::spawn(move || {
+            let started = std::time::Instant::now();
+            while !thread_stop.load(Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        let _ = stream.set_nonblocking(false);
+                        let mut buf = [0u8; 4096];
+                        let _ = stream.read(&mut buf);
+                        let header = "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 99999999999\r\nConnection: close\r\n\r\n";
+                        let _ = stream.write_all(header.as_bytes());
+                        let _ = stream.flush();
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        if started.elapsed() > std::time::Duration::from_secs(60) {
+                            break;
+                        }
+                        thread::sleep(std::time::Duration::from_millis(5));
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+        ByteServer { url, stop, handle: Some(handle) }
+    }
 }
 
 impl Drop for ByteServer {
@@ -98,7 +130,7 @@ async fn spawn_app(allow_private_proxy: bool) -> axum::Router {
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
+    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
     let engine = Engine::new(&config).await.unwrap();
     let db = app_db::open(&config.data_dir).unwrap();
     let app_db = Arc::new(Mutex::new(db));
@@ -171,7 +203,17 @@ async fn proxy_rejects_private_target() {
     let uri = format!("/img?u={}", url_encode(&server.url));
     let resp = app.clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
-        .await
-        .unwrap();
+        .await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
+async fn proxy_rejects_oversized_content_length() {
+    let server = ByteServer::start_huge_content_length();
+    let app = spawn_app(true).await;
+    let uri = format!("/img?u={}", url_encode(&server.url));
+    let resp = app.clone()
+        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+        .await.unwrap();
+    assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
 }

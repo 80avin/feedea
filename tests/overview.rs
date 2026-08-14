@@ -48,7 +48,7 @@ async fn spawn_app() -> (String, axum::Router, feed_server::FeedServer) {
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
+    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
     let engine = Engine::new(&config).await.unwrap();
     let mut db = app_db::open(&config.data_dir).unwrap();
     db.set_password_hash(&auth::hash_password("test-pass").unwrap()).unwrap();
@@ -81,6 +81,73 @@ async fn overview_requires_auth() {
         .oneshot(Request::builder().uri("/api/overview").body(Body::empty()).unwrap())
         .await.unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn overview_parent_card_includes_descendant_feed_counts() {
+    let (feed_url, app, _server) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+
+    let create_resp = app.clone()
+        .oneshot(Request::builder().method("POST").uri("/api/categories")
+            .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::from(r#"{"name":"Parent"}"#)).unwrap())
+        .await.unwrap();
+    assert_eq!(create_resp.status(), StatusCode::OK);
+    let body = create_resp.into_body().collect().await.unwrap().to_bytes();
+    let parent_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["category_id"].as_str().unwrap().to_string();
+
+    let create_resp = app.clone()
+        .oneshot(Request::builder().method("POST").uri("/api/categories")
+            .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::from(format!(r#"{{"name":"Child","parent_id":"{parent_id}"}}"#))).unwrap())
+        .await.unwrap();
+    assert_eq!(create_resp.status(), StatusCode::OK);
+    let body = create_resp.into_body().collect().await.unwrap().to_bytes();
+    let child_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["category_id"].as_str().unwrap().to_string();
+
+    let add_resp = app.clone()
+        .oneshot(Request::builder().method("POST").uri("/api/sources")
+            .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::from(format!(r#"{{"url":"{feed_url}","title":"Nested Feed","category_id":"{child_id}"}}"#)))
+            .unwrap())
+        .await.unwrap();
+    assert_eq!(add_resp.status(), StatusCode::OK);
+
+    let refresh_resp = app.clone()
+        .oneshot(Request::builder().method("POST").uri("/api/sources/refresh-all")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    assert_eq!(refresh_resp.status(), StatusCode::OK);
+
+    let resp = app.clone()
+        .oneshot(Request::builder().uri("/api/overview")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    let cards = json["cards"].as_array().expect("cards should be an array");
+    let parent = cards.iter().find(|card| card["name"] == "Parent")
+        .expect("parent card should exist");
+    assert!(
+        parent["total_count"].as_i64().unwrap() >= 1,
+        "parent total_count should reflect descendant feeds, got {parent:?}"
+    );
+    assert!(
+        parent["unread_count"].as_i64().unwrap() >= 1,
+        "parent unread_count should reflect descendant feeds, got {parent:?}"
+    );
+    let child = cards.iter().find(|card| card["category_id"] == child_id)
+        .expect("child card should exist");
+    assert!(child["total_count"].as_i64().unwrap() >= 1);
+    assert!(child["unread_count"].as_i64().unwrap() >= 1);
 }
 
 #[tokio::test]

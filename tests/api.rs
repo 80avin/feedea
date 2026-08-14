@@ -59,7 +59,7 @@ async fn spawn_app() -> (String, axum::Router, feed_server::FeedServer, Arc<Mute
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
+    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
     let engine = Engine::new(&config).await.unwrap();
     let mut db = app_db::open(&config.data_dir).unwrap();
     db.set_password_hash(&auth::hash_password("test-pass").unwrap()).unwrap();
@@ -253,6 +253,18 @@ async fn search_filters_and_suggestions() {
     let body = none_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json.as_array().unwrap().is_empty());
+
+    for q in ["", "%20"] {
+        let sug_resp = app.clone()
+            .oneshot(Request::builder().uri(format!("/api/search/suggestions?q={q}"))
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(sug_resp.status(), StatusCode::OK);
+        let body = sug_resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json["suggestions"].as_array().unwrap().is_empty());
+    }
 }
 
 #[tokio::test]
@@ -353,6 +365,63 @@ async fn unread_state(app: &axum::Router, cookie: &str, id: &str) -> bool {
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     json.as_array().unwrap().iter().find(|a| a["id"] == id).unwrap()["unread"].as_bool().unwrap()
+}
+
+#[tokio::test]
+async fn unread_filter_filters_read_and_unread() {
+    let (feed_url, app, _server, _db, _dir) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+    add_and_sync(&app, &cookie, &feed_url).await;
+
+    let list_resp = app.clone()
+        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    let body = list_resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let arr = json.as_array().unwrap();
+    assert_eq!(arr.len(), 2);
+    let id = arr[0]["id"].as_str().unwrap().to_string();
+    assert!(unread_state(&app, &cookie, &id).await);
+
+    let patch_resp = app.clone()
+        .oneshot(Request::builder().method("PATCH")
+            .uri(format!("/api/articles/{id}"))
+            .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::from(r#"{"read":true}"#)).unwrap())
+        .await.unwrap();
+    assert_eq!(patch_resp.status(), StatusCode::OK);
+
+    let unread_resp = app.clone()
+        .oneshot(Request::builder().uri("/api/articles?unread=true&offset=0&limit=10")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    let body = unread_resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let arr = json.as_array().unwrap();
+    assert_eq!(arr.len(), 1, "unread=true should exclude the read article");
+    assert_ne!(arr[0]["id"], id);
+
+    let read_resp = app.clone()
+        .oneshot(Request::builder().uri("/api/articles?unread=false&offset=0&limit=10")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    let body = read_resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let arr = json.as_array().unwrap();
+    assert_eq!(arr.len(), 1, "unread=false should include the read article");
+    assert_eq!(arr[0]["id"], id);
+
+    let bad_resp = app.clone()
+        .oneshot(Request::builder().uri("/api/articles?unread=maybe")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    assert_eq!(bad_resp.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

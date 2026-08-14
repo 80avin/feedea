@@ -249,11 +249,35 @@ impl Engine {
     pub async fn category_unread_map(&self) -> anyhow::Result<std::collections::HashMap<String, i64>> {
         let unread = self.with_nf(|nf| nf.unread_count_feed_map(false)).await?;
         let (_, mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
-        let mut out: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
-        for m in mappings {
-            let cat = m.category_id.as_str().to_string();
+        let (categories, category_mappings) = self.get_categories().await?;
+        let mut children: HashMap<String, Vec<String>> = HashMap::new();
+        for cm in &category_mappings {
+            children
+                .entry(cm.parent_id.as_str().to_string())
+                .or_default()
+                .push(cm.category_id.as_str().to_string());
+        }
+        let mut direct: HashMap<String, i64> = HashMap::new();
+        for m in &mappings {
             let count = unread.get(&m.feed_id).copied().unwrap_or(0);
-            *out.entry(cat).or_insert(0) += count;
+            *direct.entry(m.category_id.as_str().to_string()).or_insert(0) += count;
+        }
+        let mut cat_ids: Vec<String> = direct.keys().cloned().collect();
+        for c in &categories {
+            cat_ids.push(c.category_id.as_str().to_string());
+        }
+        cat_ids.push(news_flash::models::NEWSFLASH_TOPLEVEL.as_str().to_string());
+        let mut out: HashMap<String, i64> = HashMap::new();
+        let mut seen = std::collections::HashSet::new();
+        for cat in cat_ids {
+            if !seen.insert(cat.clone()) {
+                continue;
+            }
+            let total = crate::engine::queries::descendant_category_ids(&cat, &children)
+                .iter()
+                .filter_map(|id| direct.get(id))
+                .sum();
+            out.insert(cat, total);
         }
         Ok(out)
     }
@@ -584,6 +608,7 @@ pub mod tests {
             data_dir: dir.clone(),
             host: "127.0.0.1".into(),
             port: 0,
+            allow_private_proxy: false,
         };
         let engine = Engine::new(&config).await.unwrap();
         assert!(dir.join("engine/config").exists());
@@ -603,6 +628,7 @@ pub mod tests {
             data_dir: dir,
             host: "127.0.0.1".into(),
             port: 0,
+            allow_private_proxy: false,
         };
         let engine = Engine::new(&config).await.unwrap();
         let feed = engine.add_feed(&server.url, Some("Test Feed".into()), None).await.unwrap();
@@ -619,7 +645,7 @@ pub mod tests {
     #[tokio::test]
     async fn reads_return_feeds_and_headlines() {
         let server = crate::engine::tests::FeedServer::start(RSS.to_string(), 6);
-        let config = Config { data_dir: tmp_dir(), host: "127.0.0.1".into(), port: 0 };
+        let config = Config { data_dir: tmp_dir(), host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
         let engine = Engine::new(&config).await.unwrap();
         let _feed = engine.add_feed(&server.url, Some("Test Feed".into()), None).await.unwrap();
         engine.sync_all().await.unwrap();

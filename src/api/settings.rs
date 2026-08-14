@@ -50,6 +50,9 @@ pub async fn update(State(state): State<AppState>, Json(req): Json<UpdateSetting
         state.app_db.lock().await.set_theme(theme)?;
     }
     if let Some(minutes) = req.sync_interval_minutes {
+        if minutes <= 0 {
+            return Err(ApiError::bad_request("sync_interval_minutes must be positive"));
+        }
         state.app_db.lock().await.set_sync_interval_minutes(minutes)?;
     }
     if let Some(days) = req.keep_articles_days {

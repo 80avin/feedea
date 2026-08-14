@@ -13,6 +13,9 @@ pub struct SuggestParams {
 
 pub async fn suggestions(State(state): State<AppState>, Query(params): Query<SuggestParams>) -> ApiResult<Json<Value>> {
     let q = params.q.unwrap_or_default();
+    if q.trim().is_empty() {
+        return Ok(Json(json!({ "suggestions": [] })));
+    }
     let suggestions = state.engine.search(&q, 8).await?;
     Ok(Json(json!({ "suggestions": suggestions })))
 }

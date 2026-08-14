@@ -49,7 +49,7 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Respon
         StatusCode::OK,
         [(
             axum::http::header::SET_COOKIE,
-            format!("{SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0"),
+            format!("{SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"),
         )],
         Json(json!({"ok": true})),
     ).into_response()

@@ -21,7 +21,7 @@ async fn spawn_app() -> axum::Router {
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
+    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
     let engine = Engine::new(&config).await.unwrap();
     let mut db = app_db::open(&config.data_dir).unwrap();
     db.set_password_hash(&auth::hash_password("test-pass").unwrap()).unwrap();

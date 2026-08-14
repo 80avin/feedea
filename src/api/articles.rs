@@ -8,13 +8,14 @@ use serde_json::{Value, json};
 use crate::api::error::{ApiError, ApiResult};
 use crate::dto::{ArticleDetail, Headline};
 use crate::AppState;
-use news_flash::models::{ArticleFilter, ArticleOrder, CategoryID, FeedID, Marked, OrderBy};
+use news_flash::models::{ArticleFilter, ArticleOrder, CategoryID, FeedID, Marked, OrderBy, Read};
 
 #[derive(Deserialize)]
 pub struct ListParams {
     pub feed: Option<String>,
     pub category: Option<String>,
     pub saved: Option<String>,
+    pub unread: Option<String>,
     pub tag: Option<String>,
     pub search: Option<String>,
     pub offset: Option<i64>,
@@ -46,6 +47,13 @@ pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams
             "true" | "1" => Marked::Marked,
             "false" | "0" => Marked::Unmarked,
             _ => return Err(ApiError::bad_request("saved must be true/false or 1/0")),
+        });
+    }
+    if let Some(unread) = params.unread {
+        filter.unread = Some(match unread.as_str() {
+            "true" | "1" => Read::Unread,
+            "false" | "0" => Read::Read,
+            _ => return Err(ApiError::bad_request("unread must be true/false or 1/0")),
         });
     }
     if let Some(tag) = params.tag {
@@ -91,11 +99,9 @@ pub async fn patch_article(
     }
     if let Some(saved) = req.saved {
         state.engine.mark_article_saved(&id, saved).await?;
-        let mut app_db = state.app_db.lock().await;
         if saved {
-            app_db.save_article(&id, None, &[])?;
-        } else {
-            app_db.unsave_article(&id)?;
+            let mut app_db = state.app_db.lock().await;
+            app_db.ensure_saved(&id)?;
         }
     }
     Ok(Json(json!({ "ok": true })))

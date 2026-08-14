@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::OnceLock;
 
 use axum::extract::{Query, State};
@@ -19,6 +19,8 @@ fn proxy_client() -> &'static reqwest::Client {
     })
 }
 
+const MAX_BODY_BYTES: u64 = 20 * 1024 * 1024;
+
 #[derive(Deserialize)]
 pub struct ImgParams {
     pub u: Option<String>,
@@ -37,13 +39,35 @@ pub async fn proxy_image(
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
         return (StatusCode::BAD_REQUEST, "only http/https allowed").into_response();
     }
-    if !state.allow_private_proxy && check_ssrf(&parsed).await.is_err() {
-        return (StatusCode::BAD_GATEWAY, "blocked target").into_response();
-    }
-    match proxy_client().get(parsed.as_str()).send().await {
+    let client = if state.allow_private_proxy {
+        proxy_client()
+    } else {
+        let Some(addrs) = resolve_validated(&parsed).await else {
+            return (StatusCode::BAD_GATEWAY, "blocked target").into_response();
+        };
+        let Some(host) = parsed.host_str() else {
+            return (StatusCode::BAD_GATEWAY, "blocked target").into_response();
+        };
+        let Ok(client) = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .resolve_to_addrs(host, &addrs)
+            .build()
+        else {
+            return (StatusCode::BAD_GATEWAY, "client build failed").into_response();
+        };
+        return fetch(&client, &parsed).await;
+    };
+    fetch(client, &parsed).await
+}
+
+async fn fetch(client: &reqwest::Client, parsed: &url::Url) -> Response {
+    match client.get(parsed.as_str()).send().await {
         Ok(resp) => {
             if !resp.status().is_success() {
                 return (StatusCode::BAD_GATEWAY, "upstream error").into_response();
+            }
+            if resp.content_length().is_some_and(|len| len > MAX_BODY_BYTES) {
+                return (StatusCode::PAYLOAD_TOO_LARGE, "image too large").into_response();
             }
             let content_type = resp
                 .headers()
@@ -52,7 +76,8 @@ pub async fn proxy_image(
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| "application/octet-stream".to_string());
             let bytes = match resp.bytes().await {
-                Ok(b) => b,
+                Ok(b) if b.len() as u64 <= MAX_BODY_BYTES => b,
+                Ok(_) => return (StatusCode::PAYLOAD_TOO_LARGE, "image too large").into_response(),
                 Err(_) => return (StatusCode::BAD_GATEWAY, "read failed").into_response(),
             };
             ([(header::CONTENT_TYPE, content_type)], bytes).into_response()
@@ -61,16 +86,18 @@ pub async fn proxy_image(
     }
 }
 
-async fn check_ssrf(parsed: &url::Url) -> Result<(), ()> {
-    let host = parsed.host_str().ok_or(())?;
+async fn resolve_validated(parsed: &url::Url) -> Option<Vec<SocketAddr>> {
+    let host = parsed.host_str()?;
     let port = parsed.port_or_known_default().unwrap_or(80);
-    let addrs = tokio::net::lookup_host((host, port)).await.map_err(|_| ())?;
+    let addrs = tokio::net::lookup_host((host, port)).await.ok()?;
+    let mut validated = Vec::new();
     for addr in addrs {
         if is_blocked_ip(addr.ip()) {
-            return Err(());
+            return None;
         }
+        validated.push(SocketAddr::new(addr.ip(), 0));
     }
-    Ok(())
+    Some(validated)
 }
 
 fn is_v4_reserved(addr: Ipv4Addr) -> bool {

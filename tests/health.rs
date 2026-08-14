@@ -18,6 +18,7 @@ async fn health_returns_ok_with_version() {
         data_dir: dir,
         host: "127.0.0.1".into(),
         port: 3000,
+        allow_private_proxy: false,
     };
     let engine = Engine::new(&cfg).await.unwrap();
     let app_db = Arc::new(Mutex::new(app_db::open(&cfg.data_dir).unwrap()));

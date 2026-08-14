@@ -48,7 +48,7 @@ async fn spawn_app() -> (String, axum::Router, feed_server::FeedServer) {
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
+    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
     let engine = Engine::new(&config).await.unwrap();
     let mut db = app_db::open(&config.data_dir).unwrap();
     db.set_password_hash(&auth::hash_password("test-pass").unwrap()).unwrap();
@@ -89,6 +89,84 @@ async fn add_and_sync(app: &axum::Router, cookie: &str, feed_url: &str) {
             .body(Body::empty()).unwrap())
         .await.unwrap();
     assert_eq!(refresh_resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn patch_save_preserves_note_and_tags() {
+    let (feed_url, app, _server) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+    add_and_sync(&app, &cookie, &feed_url).await;
+
+    let list_resp = app.clone()
+        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    let body = list_resp.into_body().collect().await.unwrap().to_bytes();
+    let articles: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let arr = articles.as_array().unwrap();
+    assert_eq!(arr.len(), 2);
+    let id = arr[0]["id"].as_str().unwrap().to_string();
+
+    let save_resp = app.clone()
+        .oneshot(Request::builder().method("POST")
+            .uri(format!("/api/articles/{id}/save"))
+            .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::from(r#"{"note":"must read","tags":["favorites","work"]}"#))
+            .unwrap())
+        .await.unwrap();
+    assert_eq!(save_resp.status(), StatusCode::OK);
+
+    let patch_resp = app.clone()
+        .oneshot(Request::builder().method("PATCH")
+            .uri(format!("/api/articles/{id}"))
+            .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::from(r#"{"saved":true}"#)).unwrap())
+        .await.unwrap();
+    assert_eq!(patch_resp.status(), StatusCode::OK);
+
+    let detail_resp = app.clone()
+        .oneshot(Request::builder().uri(format!("/api/articles/{id}"))
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    let body = detail_resp.into_body().collect().await.unwrap().to_bytes();
+    let detail: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(detail["note"], "must read");
+    let tags = detail["tags"].as_array().unwrap();
+    assert!(tags.iter().any(|t| t == "favorites"));
+    assert!(tags.iter().any(|t| t == "work"));
+
+    let off_resp = app.clone()
+        .oneshot(Request::builder().method("PATCH")
+            .uri(format!("/api/articles/{id}"))
+            .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::from(r#"{"saved":false}"#)).unwrap())
+        .await.unwrap();
+    assert_eq!(off_resp.status(), StatusCode::OK);
+    let on_resp = app.clone()
+        .oneshot(Request::builder().method("PATCH")
+            .uri(format!("/api/articles/{id}"))
+            .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::from(r#"{"saved":true}"#)).unwrap())
+        .await.unwrap();
+    assert_eq!(on_resp.status(), StatusCode::OK);
+
+    let detail_resp = app.clone()
+        .oneshot(Request::builder().uri(format!("/api/articles/{id}"))
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    let body = detail_resp.into_body().collect().await.unwrap().to_bytes();
+    let detail: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(detail["note"], "must read");
+    let tags = detail["tags"].as_array().unwrap();
+    assert!(tags.iter().any(|t| t == "favorites"));
+    assert!(tags.iter().any(|t| t == "work"));
 }
 
 #[tokio::test]
