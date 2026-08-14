@@ -11,7 +11,7 @@ export function useSession() {
   const location = useLocation();
   const queryClient = useQueryClient();
 
-  const { data: session, isLoading } = useQuery({
+  const { data: session, isLoading, isError, error, refetch } = useQuery({
     queryKey: SESSION_QUERY_KEY,
     queryFn: () => api.get<SessionInfo>("/api/session"),
     retry: false,
@@ -61,5 +61,5 @@ export function useSession() {
     }
   }, [navigate, queryClient]);
 
-  return { session, loading: isLoading, login, logout, refresh };
+  return { session, loading: isLoading, isError, error, login, logout, refresh, retry: refetch };
 }

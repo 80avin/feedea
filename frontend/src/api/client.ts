@@ -14,6 +14,10 @@ export class ApiError extends Error {
 
 const AUTH_EXEMPT = new Set(["/api/login", "/api/session"]);
 
+export function encodeId(id: string): string {
+  return encodeURIComponent(id);
+}
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(path, init);
   if (res.ok) {

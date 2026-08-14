@@ -1,13 +1,12 @@
-import { Outlet, useLocation, useSearchParams } from "react-router";
+import { Outlet } from "react-router";
 import clsx from "clsx";
 import Sidebar from "../components/Sidebar";
 import ReaderPanel from "../components/ReaderPanel";
+import { useSelectedArticleId } from "../hooks/useSelectedArticleId";
 
 export default function DesktopLayout() {
-  const [searchParams] = useSearchParams();
-  const { pathname } = useLocation();
-  const articleId = searchParams.get("article");
-  const showReader = pathname === "/feeds" && !!articleId;
+  const articleId = useSelectedArticleId();
+  const showReader = !!articleId;
 
   return (
     <div
@@ -24,7 +23,7 @@ export default function DesktopLayout() {
       </main>
       {showReader && (
         <aside className="min-h-0 overflow-y-auto">
-          <ReaderPanel articleId={articleId} />
+          <ReaderPanel />
         </aside>
       )}
     </div>

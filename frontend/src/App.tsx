@@ -7,7 +7,6 @@ import Saved from "./pages/Saved";
 import Settings from "./pages/Settings";
 import Sources from "./pages/Sources";
 import Help from "./pages/Help";
-import ReaderPanel from "./components/ReaderPanel";
 
 export default function App() {
   return (
@@ -15,8 +14,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<Shell />}>
         <Route index element={<Overview />} />
-        <Route path="feeds" element={<Feeds />} />
-        <Route path="feeds/:articleId" element={<ReaderPanel />} />
+        <Route path="feeds/*" element={<Feeds />} />
         <Route path="saved" element={<Saved />} />
         <Route path="settings" element={<Settings />} />
         <Route path="sources" element={<Sources />} />

@@ -1,12 +1,7 @@
-import { useParams } from "react-router";
+import { useSelectedArticleId } from "../hooks/useSelectedArticleId";
 
-interface ReaderPanelProps {
-  articleId?: string;
-}
-
-export default function ReaderPanel({ articleId }: ReaderPanelProps) {
-  const { articleId: routeArticleId } = useParams();
-  const id = articleId ?? routeArticleId;
+export default function ReaderPanel() {
+  const id = useSelectedArticleId();
 
   return (
     <div className="flex h-full flex-col p-4">

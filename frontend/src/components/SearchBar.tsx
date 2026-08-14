@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Input } from "@heroui/react";
+import { encodeId } from "../api/client";
 import { useDebounce } from "../hooks/useDebounce";
 import { useSuggestions } from "../state/hooks";
 import SearchSuggestions from "./SearchSuggestions";
@@ -72,7 +73,7 @@ export default function SearchBar() {
           suggestions={suggestions}
           onSelect={(id) => {
             setOpen(false);
-            navigate(`/feeds?article=${encodeURIComponent(id)}`);
+            navigate(`/feeds/${encodeId(id)}`);
           }}
         />
       )}

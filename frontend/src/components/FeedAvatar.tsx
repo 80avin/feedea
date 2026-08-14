@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { encodeId } from "../api/client";
 
 export default function FeedAvatar({
   feedId,
@@ -22,7 +23,7 @@ export default function FeedAvatar({
 
   return (
     <img
-      src={`/api/favicon/${encodeURIComponent(feedId)}`}
+      src={`/api/favicon/${encodeId(feedId)}`}
       alt=""
       loading="lazy"
       onError={() => setFailed(true)}

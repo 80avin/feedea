@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, apiGetText } from "../api/client";
+import { api, apiGetText, encodeId } from "../api/client";
 import type {
   ArticleDetail,
   ArticleQueryParams,
@@ -134,7 +134,7 @@ export function useSaved(params: { offset?: number; limit?: number } = {}) {
 export function useArticle(id: string) {
   return useQuery({
     queryKey: queryKeys.article(id),
-    queryFn: () => api.get<ArticleDetail>(`/api/articles/${id}`),
+    queryFn: () => api.get<ArticleDetail>(`/api/articles/${encodeId(id)}`),
     enabled: id.length > 0,
   });
 }
@@ -143,7 +143,7 @@ export function useSaveArticle() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, note, tags }: { id: string; note?: string; tags?: string[] }) =>
-      api.post(`/api/articles/${id}/save`, { note, tags: tags ?? [] }),
+      api.post(`/api/articles/${encodeId(id)}/save`, { note, tags: tags ?? [] }),
     onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["articles"] });
       queryClient.invalidateQueries({ queryKey: ["saved"] });
@@ -156,7 +156,7 @@ export function useSaveArticle() {
 export function useUnsaveArticle() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id }: { id: string }) => api.delete(`/api/articles/${id}/save`),
+    mutationFn: ({ id }: { id: string }) => api.delete(`/api/articles/${encodeId(id)}/save`),
     onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["articles"] });
       queryClient.invalidateQueries({ queryKey: ["saved"] });
@@ -170,7 +170,7 @@ export function useMarkRead() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, read }: { id: string; read: boolean }) =>
-      api.post(`/api/articles/${id}/${read ? "read" : "unread"}`, read ? { read: true } : undefined),
+      api.post(`/api/articles/${encodeId(id)}/${read ? "read" : "unread"}`, read ? { read: true } : undefined),
     onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["articles"] });
       queryClient.invalidateQueries({ queryKey: ["overview"] });
@@ -197,7 +197,7 @@ export function useMarkAllRead() {
 export function useRefreshFeed() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id }: { id: string }) => api.post(`/api/sources/${id}/refresh`),
+    mutationFn: ({ id }: { id: string }) => api.post(`/api/sources/${encodeId(id)}/refresh`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["articles"] });
       queryClient.invalidateQueries({ queryKey: ["feeds"] });
@@ -224,7 +224,7 @@ export function useAddSource() {
 export function useDeleteFeed() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id }: { id: string }) => api.delete(`/api/sources/${id}`),
+    mutationFn: ({ id }: { id: string }) => api.delete(`/api/sources/${encodeId(id)}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["feeds"] });
       queryClient.invalidateQueries({ queryKey: ["sources"] });
@@ -250,7 +250,7 @@ export function useDeleteCategory() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, remove_children }: { id: string; remove_children?: boolean }) =>
-      api.delete(`/api/categories/${id}`, { remove_children: remove_children ?? false }),
+      api.delete(`/api/categories/${encodeId(id)}`, { remove_children: remove_children ?? false }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       queryClient.invalidateQueries({ queryKey: ["overview"] });
@@ -263,7 +263,7 @@ export function useDeleteCategory() {
 export function useRenameCategory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => api.patch(`/api/categories/${id}`, { name }),
+    mutationFn: ({ id, name }: { id: string; name: string }) => api.patch(`/api/categories/${encodeId(id)}`, { name }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       queryClient.invalidateQueries({ queryKey: ["overview"] });
@@ -274,7 +274,7 @@ export function useRenameCategory() {
 export function useMarkCategoryRead() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id }: { id: string }) => api.post(`/api/categories/${id}/read`),
+    mutationFn: ({ id }: { id: string }) => api.post(`/api/categories/${encodeId(id)}/read`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       queryClient.invalidateQueries({ queryKey: ["articles"] });
