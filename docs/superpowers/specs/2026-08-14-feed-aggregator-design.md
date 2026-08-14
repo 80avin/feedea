@@ -75,9 +75,34 @@ Two SQLite databases, linked by news-flash string IDs (`feed_id`, `article_id`,
   actor (tokio task) that serializes access.
 - All calls into news-flash and CPU-heavy work (parsing, scraping, HTML rewrite) run
   via `spawn_blocking` to avoid blocking the async runtime.
-- news-flash provides: feed fetch/discovery, dedup, favicons, thumbnails, tags,
-  categories, read/marked flags, FTS4 search, OPML import/export, article scraping
-  (feature-gated), per-host rate limiting.
+- news-flash provides: feed fetch, dedup, favicons, thumbnails, tags, categories,
+  read/marked flags, OPML import/export, article scraping (feature-gated),
+  per-host rate limiting.
+- **Verified facts (Phase 0 research, 2026-08-14):**
+  - `builder().create()` works headless with an empty config dir (no login needed
+    for `local_rss`; `is_logged_in` → true). `create()` is **synchronous** and runs
+    all SQLite migrations on the calling thread — call it at startup on a worker.
+  - `reqwest = "0.13"` is required (news-flash's own Client type); do not use 0.12.
+  - `sync(client, FeedHeaderMap::new())` returns per-feed new-article counts and is
+    idempotent; re-sync yields 0.
+  - news-flash FTS4 search is **broken in v3.2.0**: `database/mod.rs:153` selects
+    `article_id` from `fts_table`, but the final migration recreates it as
+    `fts5(title, author, plain_text, content='articles_search_view')` with no
+    `article_id`. `get_fat_articles(search_term)` hard-errors
+    (`ambiguous column name: article_id`); `get_article_ids(search_term)` silently
+    returns wrong results. **Fix:** query search from a sidecar read-only connection
+    using `articles.rowid IN (SELECT rowid FROM fts_table WHERE fts_table MATCH ?)`.
+  - `add_feed` does NOT autodiscover a feed from an HTML homepage URL. Use the public
+    helper `news_flash::feed_parser::download_and_parse_feed` (re-exported as
+    `news_flash::feed_parser`) for `POST /sources` and `POST /sources/discover`.
+  - No public per-category or total article counts. `get_article_ids(...)` + `.len()`
+    is the only public path; instead run count queries via a sidecar read-only
+    connection to news-flash's `database.sqlite` (WAL allows concurrent readers),
+    joining `feed_mapping` + `articles`.
+  - All `get_*`/count methods are synchronous (blocking Diesel); async methods
+    (`sync`, `add_feed`, `import_opml`, `scrap_content_*`) do blocking DB work inline
+    — wrap everything in `spawn_blocking`.
+  - news-flash is GPL-3.0-or-later; note this for distribution/licensing.
 
 ### 3.2 Custom sidecar (app DB) schema
 Linked by news-flash IDs. Contents:
@@ -88,6 +113,11 @@ Linked by news-flash IDs. Contents:
 - `sessions` — session tokens (hashed), created_at, expires_at.
 - `settings` — key/value app settings (sync interval, keep-articles duration, theme,
   password hash).
+
+Additionally, the app opens a **read-only connection** to news-flash's
+`database.sqlite` for queries news-flash's public API cannot answer (search via the
+fixed FTS query above, per-category totals/unread counts). Schema coupling is
+isolated behind a single module so an upstream schema change only touches one file.
 - `proxy_cache` — optional on-disk cache metadata for proxied images.
 
 The "saved" flag in the timeline is news-flash's `marked`; our `saved` table stores the
@@ -143,8 +173,11 @@ All JSON, camelCase, session-cookie protected except login/session. Errors:
 ### Search
 - `GET /api/search/suggestions?q=` → top 5–8 matches (title + source + thumbnail) for
   the live dropdown, debounced client-side (~300ms).
-- Full search on Enter uses `GET /api/articles?search=...` (news-flash FTS +
-  source-name match).
+- Full search on Enter uses `GET /api/articles?search=...`.
+- Implementation: search runs over a read-only connection to news-flash's DB using the
+  corrected FTS query `articles.rowid IN (SELECT rowid FROM fts_table WHERE fts_table
+  MATCH ?)` (see §3.1) plus a LIKE match on feed labels, since FTS covers article
+  title/author/plain_text but not source names.
 
 ### Media
 - `GET /img?u=<absolute-url>` → proxied image (see 6).
@@ -178,9 +211,16 @@ All JSON, camelCase, session-cookie protected except login/session. Errors:
 ## 7. Frontend
 
 ### Stack
-React 18 + TypeScript + HeroUI (React Aria based), `@tanstack/react-query` (server
-state + infinite queries), `react-router`, `vite-plugin-pwa` (installable, auto-update),
-`clsx`/Tailwind via HeroUI preset. Managed by bun.
+React 19 + TypeScript + HeroUI v3 (`@heroui/react`), `@tanstack/react-query` (server
+state + infinite queries), `react-router` (v8, `BrowserRouter`), `vite-plugin-pwa`
+(installable, auto-update), Tailwind v4 via `@tailwindcss/vite`, `clsx`. Managed by bun.
+
+**Verified stack (Phase 0, 2026-08-14):** HeroUI v3.2.4 requires React ≥19, Tailwind
+v4, no `HeroUIProvider` wrapper, no framer-motion; `@nextui-org/react` is deprecated.
+CSS order: `@import "tailwindcss";` then `@import "@heroui/styles";`. TypeScript pin
+6.0.3 (typescript-eslint caps <6.1). react-router v8 needs react ≥19.2.7.
+vite-plugin-pwa needs workbox-build + workbox-window 7.4.1; auto-update via
+`registerSW({ immediate: true })` from `virtual:pwa-register`.
 
 ### Structure
 ```
@@ -255,6 +295,7 @@ src/
     mod.rs       — owns NewsFlash, spawn_blocking bridge
     sync.rs      — periodic sync scheduler
     content.rs   — HTML rewrite (absolute URLs, proxy images)
+    queries.rs   — read-only queries against news-flash DB (search, counts)
   api/
     mod.rs       — axum router
     feeds.rs, categories.rs, articles.rs, saved.rs, sources.rs, settings.rs
@@ -263,7 +304,7 @@ src/
   proxy.rs       — image proxy endpoint
   assets.rs      — rust-embed static serving
   static/        — embedded frontend (built by bun)
-frontend/        — React + HeroUI + Vite + bun (the PWA)
+frontend/        — React + HeroUI v3 + Vite + bun (the PWA)
 ```
 
 ## 10. Error handling & testing
