@@ -7,19 +7,23 @@ use tokio::sync::Mutex;
 
 pub const DEFAULT_SYNC_INTERVAL: Duration = Duration::from_secs(30 * 60);
 
+async fn read_interval(app_db: &Arc<Mutex<AppDb>>, default_interval: Duration) -> Duration {
+    match app_db.lock().await.get_setting("sync_interval_minutes") {
+        Ok(Some(raw)) => match raw.parse::<u64>() {
+            Ok(minutes) if minutes > 0 => Duration::from_secs(minutes * 60),
+            _ => default_interval,
+        },
+        _ => default_interval,
+    }
+}
+
 pub async fn scheduler_loop(engine: Engine, app_db: Arc<Mutex<AppDb>>, default_interval: Duration) {
     loop {
-        let interval = match app_db.lock().await.get_setting("sync_interval_minutes") {
-            Ok(Some(raw)) => match raw.parse::<u64>() {
-                Ok(minutes) if minutes > 0 => Duration::from_secs(minutes * 60),
-                _ => default_interval,
-            },
-            _ => default_interval,
-        };
-        tokio::time::sleep(interval).await;
         if let Err(error) = engine.sync_all().await {
             tracing::warn!(%error, "scheduled sync failed");
         }
+        let interval = read_interval(&app_db, default_interval).await;
+        tokio::time::sleep(interval).await;
     }
 }
 
