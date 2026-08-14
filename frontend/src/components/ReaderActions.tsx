@@ -52,14 +52,14 @@ export default function ReaderActions({ article, onSaveClick, layout = "row", cl
     if (navigator.share) {
       try {
         await navigator.share({ title: article.title ?? "", url: article.url });
-      } catch {}
-    } else {
-      try {
-        await navigator.clipboard.writeText(article.url);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        return;
       } catch {}
     }
+    try {
+      await navigator.clipboard.writeText(article.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
   };
 
   const actions: Action[] = [

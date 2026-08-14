@@ -29,6 +29,7 @@ export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps
   const { data: tagsData } = useTags();
   const suggestions = tagsData?.tags ?? [];
   const pending = create.isPending || update.isPending;
+  const loading = !article;
 
   useEffect(() => {
     if (open && article) {
@@ -101,8 +102,8 @@ export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps
               <Button variant="ghost" size="sm" onPress={onClose} isDisabled={pending}>
                 Cancel
               </Button>
-              <Button variant="primary" size="sm" onPress={submit} isDisabled={pending}>
-                {pending ? "Saving…" : article?.marked ? "Update" : "Save"}
+              <Button variant="primary" size="sm" onPress={submit} isDisabled={pending || loading}>
+                {pending ? "Saving…" : loading ? "Loading…" : article?.marked ? "Update" : "Save"}
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

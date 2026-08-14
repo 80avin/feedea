@@ -1,7 +1,10 @@
 export function formatAge(iso: string): string {
   const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
   const diffMs = Date.now() - date.getTime();
-  if (Number.isNaN(diffMs) || diffMs < 0) {
+  if (diffMs < 0) {
     return date.toLocaleDateString();
   }
   const minutes = Math.floor(diffMs / 60_000);

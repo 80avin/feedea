@@ -5,6 +5,9 @@ import { useSession } from "../auth/useSession";
 import { useChangePassword, useSettings, useUpdateSettings } from "../state/hooks";
 import { ErrorState, LoadingState, formatError } from "../components/Feedback";
 
+const REPO_URL = "https://github.com/yourname/rssea";
+const ISSUES_URL = "https://github.com/yourname/rssea/issues";
+
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
@@ -210,6 +213,32 @@ export default function Settings() {
               </div>
             </section>
           )}
+
+          <section className="flex flex-col gap-3 rounded-lg border border-zinc-800 p-4">
+            <h3 className="text-sm font-semibold">About</h3>
+            <p className="text-sm text-zinc-400">
+              rssea is a self-hosted RSS feed aggregator. The repository is not published
+              yet; the links below will be updated once it goes public.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={REPO_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-500 hover:text-zinc-100"
+              >
+                Repository
+              </a>
+              <a
+                href={ISSUES_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-500 hover:text-zinc-100"
+              >
+                Report an issue
+              </a>
+            </div>
+          </section>
 
           <div className="flex-1" />
           <Button variant="ghost" size="sm" fullWidth onPress={logout} className="justify-start">
