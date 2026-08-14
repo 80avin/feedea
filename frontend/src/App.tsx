@@ -1,7 +1,15 @@
+import { Route, Routes } from "react-router";
+import Shell from "./components/Shell";
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+
 export default function App() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-zinc-950 text-zinc-100">
-      <h1 className="text-4xl font-bold tracking-tight">rssea</h1>
-    </main>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<Shell />}>
+        <Route index element={<Home />} />
+      </Route>
+    </Routes>
   );
 }
