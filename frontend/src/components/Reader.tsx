@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
+import { ChevronLeftIcon } from "@heroicons/react/24/outline";
 import ArticleHtml from "./ArticleHtml";
 import Feedback from "./Feedback";
 import ReaderActions from "./ReaderActions";
@@ -17,8 +19,17 @@ function hostOf(url: string): string {
 
 export default function Reader() {
   const id = useSelectedArticleId();
+  const navigate = useNavigate();
   const { data, isLoading, isError, error, refetch } = useArticle(id ?? "");
   const [saveOpen, setSaveOpen] = useState(false);
+
+  const goBack = () => {
+    if (window.history.state?.idx && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate("/feeds");
+    }
+  };
 
   if (!id) {
     return (
@@ -41,7 +52,17 @@ export default function Reader() {
   return (
     <div className="flex h-full flex-col pb-20 lg:pb-0">
       <div className="p-4 pb-0">
-        {data.title && <h1 className="text-xl font-semibold leading-snug text-zinc-100">{data.title}</h1>}
+        <div className="flex items-start gap-2">
+          <button
+            type="button"
+            onClick={goBack}
+            aria-label="Back to feeds"
+            className="rounded-md p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 lg:hidden"
+          >
+            <ChevronLeftIcon className="h-6 w-6" />
+          </button>
+          {data.title && <h1 className="text-xl font-semibold leading-snug text-zinc-100">{data.title}</h1>}
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400" data-reader-meta>
           {data.feed_title && <span className="font-medium text-zinc-300">{data.feed_title}</span>}
           {data.author && <span>by {data.author}</span>}

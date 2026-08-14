@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Chip, Input, Modal, TextArea, useOverlayState } from "@heroui/react";
 import { useArticle, useSaveArticle, useTags, useUpdateNoteTags } from "../state/hooks";
-import { formatError } from "./Feedback";
+import { ErrorState, formatError } from "./Feedback";
 
 interface SaveDialogProps {
   open: boolean;
@@ -20,7 +20,7 @@ export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps
       if (!isOpen) onClose();
     },
   });
-  const { data: article } = useArticle(articleId);
+  const { data: article, isLoading, isError, error: articleError, refetch } = useArticle(articleId);
   const [note, setNote] = useState("");
   const [tagsText, setTagsText] = useState("");
   const [error, setError] = useState("");
@@ -29,15 +29,20 @@ export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps
   const { data: tagsData } = useTags();
   const suggestions = tagsData?.tags ?? [];
   const pending = create.isPending || update.isPending;
-  const loading = !article;
+  const loading = isLoading;
+  const seeded = useRef<{ open: boolean; articleId: string } | null>(null);
 
   useEffect(() => {
-    if (open && article) {
+    if (open && article && seeded.current?.articleId !== articleId) {
+      seeded.current = { open, articleId };
       setNote(article.note ?? "");
       setTagsText((article.tags ?? []).join(", "));
       setError("");
     }
-  }, [open, article]);
+    if (!open) {
+      seeded.current = null;
+    }
+  }, [open, article, articleId]);
 
   const applySuggestion = (tag: string) => {
     setTagsText((prev) => {
@@ -67,6 +72,7 @@ export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps
               <Modal.Heading>{article?.marked ? "Edit note & tags" : "Save article"}</Modal.Heading>
             </Modal.Header>
             <Modal.Body>
+              {isError && <ErrorState error={articleError} onRetry={() => refetch()} />}
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-zinc-300">Note</span>
                 <TextArea
@@ -102,7 +108,7 @@ export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps
               <Button variant="ghost" size="sm" onPress={onClose} isDisabled={pending}>
                 Cancel
               </Button>
-              <Button variant="primary" size="sm" onPress={submit} isDisabled={pending || loading}>
+              <Button variant="primary" size="sm" onPress={submit} isDisabled={pending || loading || isError}>
                 {pending ? "Saving…" : loading ? "Loading…" : article?.marked ? "Update" : "Save"}
               </Button>
             </Modal.Footer>

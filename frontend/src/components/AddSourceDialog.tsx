@@ -41,6 +41,12 @@ export default function AddSourceDialog({ open, onClose }: AddSourceDialogProps)
     }
   }, [open]);
 
+  const onUrlChange = (value: string) => {
+    setUrl(value);
+    setChosenFeedUrl("");
+    setTitle("");
+  };
+
   const onFetchTitle = async () => {
     setError("");
     setDiscovered(null);
@@ -100,7 +106,7 @@ export default function AddSourceDialog({ open, onClose }: AddSourceDialogProps)
                   <Input
                     name="url"
                     value={url}
-                    onChange={(e) => setUrl(e.target.value)}
+                    onChange={(e) => onUrlChange(e.target.value)}
                     placeholder="https://example.com/feed.xml"
                     aria-label="URL"
                   />

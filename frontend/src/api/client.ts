@@ -48,7 +48,19 @@ export async function apiGetText(path: string): Promise<string> {
   if (res.ok) {
     return res.text();
   }
-  throw new ApiError(res.status, "", res.statusText);
+  let code = "";
+  let message = "";
+  try {
+    const body = (await res.json()) as ErrorEnvelope;
+    code = body.error?.code ?? "";
+    message = body.error?.message ?? "";
+  } catch {
+    message = res.statusText;
+  }
+  if (res.status === 401 && !AUTH_EXEMPT.has(path)) {
+    window.dispatchEvent(new Event("rssea:unauthorized"));
+  }
+  throw new ApiError(res.status, code, message);
 }
 
 function apiWithBody(method: string) {
