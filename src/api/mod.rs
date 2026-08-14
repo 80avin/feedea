@@ -68,5 +68,6 @@ pub fn router(state: AppState) -> Router {
         .route("/api/session", get(auth::session))
         .route("/img", get(crate::proxy::proxy_image))
         .merge(protected)
+        .fallback(crate::assets::fallback)
         .with_state(state)
 }
