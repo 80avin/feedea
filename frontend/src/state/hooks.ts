@@ -162,6 +162,22 @@ export function useUnsaveArticle() {
       queryClient.invalidateQueries({ queryKey: ["saved"] });
       queryClient.invalidateQueries({ queryKey: ["overview"] });
       queryClient.invalidateQueries({ queryKey: ["article", id] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
+    },
+  });
+}
+
+export function useUpdateNoteTags() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note, tags }: { id: string; note?: string; tags?: string[] }) =>
+      api.put(`/api/articles/${encodeId(id)}/save`, { note, tags: tags ?? [] }),
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["articles"] });
+      queryClient.invalidateQueries({ queryKey: ["saved"] });
+      queryClient.invalidateQueries({ queryKey: ["overview"] });
+      queryClient.invalidateQueries({ queryKey: ["article", id] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
     },
   });
 }

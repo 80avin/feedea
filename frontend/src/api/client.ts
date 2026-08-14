@@ -69,6 +69,10 @@ export function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return apiWithBody("PATCH")(path, body);
 }
 
+export function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  return apiWithBody("PUT")(path, body);
+}
+
 export function apiDelete<T>(path: string, body?: unknown): Promise<T> {
   return apiFetch<T>(path, {
     method: "DELETE",
@@ -81,5 +85,6 @@ export const api = {
   get: apiGet,
   post: apiPost,
   patch: apiPatch,
+  put: apiPut,
   delete: apiDelete,
 };
