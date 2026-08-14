@@ -95,7 +95,7 @@ export function useArticles(params: ArticleQueryParams): ArticlesQueryResult {
     enabled: !hasSearch,
   });
   const search = useQuery({
-    queryKey: queryKeys.articles(params),
+    queryKey: queryKeys.searchResults(params),
     queryFn: () => api.get<Headline[]>(articlesPath(params, 0, PAGE_SIZE)),
     enabled: hasSearch,
   });
