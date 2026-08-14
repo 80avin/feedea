@@ -46,6 +46,7 @@ fn newsflash_to_api(e: &news_flash::error::NewsFlashError) -> ApiError {
             if matches!(err, news_flash::error::DatabaseError::Query(diesel::result::Error::NotFound)) {
                 ApiError { status: StatusCode::NOT_FOUND, code: "not_found", message: "not found".into() }
             } else {
+                tracing::error!(%e, "internal error");
                 ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, code: "internal", message: "database error".into() }
             }
         }
@@ -53,7 +54,10 @@ fn newsflash_to_api(e: &news_flash::error::NewsFlashError) -> ApiError {
             ApiError { status: StatusCode::BAD_GATEWAY, code: "upstream", message: "content fetch failed".into() }
         }
         NewsFlashError::OPML(_) => ApiError { status: StatusCode::BAD_REQUEST, code: "bad_opml", message: "invalid opml".into() },
-        _ => ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, code: "internal", message: "internal error".into() },
+        _ => {
+            tracing::error!(%e, "internal error");
+            ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, code: "internal", message: "internal error".into() }
+        }
     }
 }
 
