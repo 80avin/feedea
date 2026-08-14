@@ -326,7 +326,7 @@ async fn import_and_export_opml() {
             .body(Body::empty()).unwrap())
         .await.unwrap();
     assert_eq!(export_resp.status(), StatusCode::OK);
-    assert_eq!(export_resp.headers().get(axum::http::header::CONTENT_TYPE).unwrap(), "application/xml");
+    assert_eq!(export_resp.headers().get(axum::http::header::CONTENT_TYPE).unwrap(), "text/xml");
     let body = export_resp.into_body().collect().await.unwrap().to_bytes();
     let xml = String::from_utf8(body.to_vec()).unwrap();
     assert!(xml.contains(&feed_url), "exported opml should contain the feed url");

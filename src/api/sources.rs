@@ -116,7 +116,7 @@ pub async fn import_opml(State(state): State<AppState>, Json(req): Json<ImportOp
 
 pub async fn export_opml(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
     let xml = state.engine.export_opml().await?;
-    Ok(([(header::CONTENT_TYPE, "application/xml")], xml))
+    Ok(([(header::CONTENT_TYPE, "text/xml")], xml))
 }
 
 pub async fn refresh(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<serde_json::Value>> {
