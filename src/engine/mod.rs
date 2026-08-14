@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use news_flash::error::NewsFlashError;
 use news_flash::feed_api::FeedHeaderMap;
-use news_flash::models::{CategoryID, FeedID, PluginID, Url};
+use news_flash::models::{ArticleFilter, CategoryID, FeedID, Marked, PluginID, Read, Url};
 use news_flash::NewsFlash;
 
 use crate::config::Config;
-use crate::dto::FeedSummary;
+use crate::dto::{ArticleDetail, FeedSummary, Headline};
 
 pub mod sync;
 
@@ -98,6 +98,85 @@ impl Engine {
         let feed_id = FeedID::new(feed_id);
         Ok(self.nf.fetch_feed(&feed_id, &self.client, reqwest::header::HeaderMap::new()).await?)
     }
+
+    pub async fn get_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
+        let unread = self.with_nf(|nf| nf.unread_count_feed_map(false)).await?;
+        let (feeds, mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
+        let category_by_feed: HashMap<String, String> = mappings
+            .into_iter()
+            .map(|m| (m.feed_id.as_str().to_string(), m.category_id.as_str().to_string()))
+            .collect();
+        let mut out = Vec::with_capacity(feeds.len());
+        for feed in feeds {
+            let id = feed.feed_id.as_str().to_string();
+            out.push(FeedSummary {
+                category_id: category_by_feed.get(&id).cloned().unwrap_or_else(|| "NewsFlash.Toplevel".to_string()),
+                unread_count: unread.get(&feed.feed_id).copied().unwrap_or(0),
+                id,
+                title: feed.label,
+                website: feed.website.map(|u| u.to_string()),
+                feed_url: feed.feed_url.map(|u| u.to_string()),
+                icon_url: feed.icon_url.map(|u| u.to_string()),
+                error_count: feed.error_count,
+                error_message: feed.error_message,
+            });
+        }
+        Ok(out)
+    }
+
+    pub async fn get_headlines(&self, filter: ArticleFilter) -> anyhow::Result<Vec<Headline>> {
+        let articles = self.with_nf(|nf| nf.get_fat_articles(filter)).await?;
+        let feed_titles: HashMap<String, String> = self
+            .get_feeds()
+            .await?
+            .into_iter()
+            .map(|f| (f.id, f.title))
+            .collect();
+        let mut out = Vec::with_capacity(articles.len());
+        for a in articles {
+            let feed_id = a.feed_id.as_str().to_string();
+            out.push(Headline {
+                id: a.article_id.as_str().to_string(),
+                title: a.title,
+                feed_id: feed_id.clone(),
+                feed_title: feed_titles.get(&feed_id).cloned(),
+                url: a.url.map(|u| u.to_string()),
+                date: a.date,
+                summary: a.summary,
+                thumbnail_url: a.thumbnail_url,
+                unread: a.unread == Read::Unread,
+                marked: a.marked == Marked::Marked,
+            });
+        }
+        Ok(out)
+    }
+
+    pub async fn get_article_detail(&self, article_id: &str) -> anyhow::Result<ArticleDetail> {
+        let id = news_flash::models::ArticleID::new(article_id);
+        let a = self.with_nf(move |nf| nf.get_fat_article(&id)).await?;
+        let feed_id = a.feed_id.as_str().to_string();
+        let feed_title = self
+            .get_feeds()
+            .await?
+            .into_iter()
+            .find(|f| f.id == feed_id)
+            .map(|f| f.title);
+        Ok(ArticleDetail {
+            id: a.article_id.as_str().to_string(),
+            title: a.title,
+            author: a.author,
+            feed_id,
+            feed_title,
+            url: a.url.map(|u| u.to_string()),
+            date: a.date,
+            html: a.scraped_content.or(a.html),
+            summary: a.summary,
+            unread: a.unread == Read::Unread,
+            marked: a.marked == Marked::Marked,
+            thumbnail_url: a.thumbnail_url,
+            plain_text: a.plain_text,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -122,12 +201,12 @@ pub mod tests {
             let url = format!("http://{addr}/feed.xml");
             let handle = thread::spawn(move || {
                 let mut served = 0;
-                let mut last_request = std::time::Instant::now();
+                let mut last_request: Option<std::time::Instant> = None;
                 while served < connections {
                     match listener.accept() {
                         Ok((mut stream, _)) => {
                             served += 1;
-                            last_request = std::time::Instant::now();
+                            last_request = Some(std::time::Instant::now());
                             let _ = stream.set_nonblocking(false);
                             let mut buf = [0u8; 4096];
                             let _ = stream.read(&mut buf);
@@ -140,7 +219,7 @@ pub mod tests {
                             let _ = stream.flush();
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                            if last_request.elapsed() > std::time::Duration::from_millis(500) {
+                            if last_request.is_some_and(|t| t.elapsed() > std::time::Duration::from_millis(500)) {
                                 break;
                             }
                             thread::sleep(std::time::Duration::from_millis(5));
@@ -229,6 +308,34 @@ pub mod tests {
         assert_eq!(article_count, 2);
         let counts2 = engine.sync_all().await.unwrap();
         assert_eq!(counts2.get(&server.url).copied(), Some(0));
+        server.stop();
+    }
+
+    #[tokio::test]
+    async fn reads_return_feeds_and_headlines() {
+        let server = crate::engine::tests::FeedServer::start(RSS.to_string(), 6);
+        let config = Config { data_dir: tmp_dir(), host: "127.0.0.1".into(), port: 0 };
+        let engine = Engine::new(&config).await.unwrap();
+        let _feed = engine.add_feed(&server.url, Some("Test Feed".into()), None).await.unwrap();
+        engine.sync_all().await.unwrap();
+
+        let feeds = engine.get_feeds().await.unwrap();
+        assert_eq!(feeds.len(), 1);
+        assert_eq!(feeds[0].title, "Test Feed");
+
+        let filter = news_flash::models::ArticleFilter {
+            order: Some(news_flash::models::ArticleOrder::NewestFirst),
+            order_by: Some(news_flash::models::OrderBy::Published),
+            ..news_flash::models::ArticleFilter::default()
+        };
+        let headlines = engine.get_headlines(filter).await.unwrap();
+        assert_eq!(headlines.len(), 2);
+        assert_eq!(headlines[0].title.as_deref(), Some("Article Beta"));
+        assert!(headlines[0].unread);
+        assert!(!headlines[0].marked);
+
+        let detail = engine.get_article_detail(&headlines[0].id).await.unwrap();
+        assert_eq!(detail.title.as_deref(), Some("Article Beta"));
         server.stop();
     }
 }
