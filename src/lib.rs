@@ -19,6 +19,7 @@ pub fn version() -> &'static str {
 pub async fn run(config: Config) -> anyhow::Result<()> {
     config.ensure_data_dir()?;
     let engine = engine::Engine::new(&config).await?;
+    tokio::spawn(engine::sync::scheduler_loop(engine.clone(), engine::sync::DEFAULT_SYNC_INTERVAL));
     let state = AppState { engine };
     let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port)).await?;
     tracing::info!("rssea {} listening on {}", crate::version(), listener.local_addr()?);

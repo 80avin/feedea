@@ -253,7 +253,7 @@ pub mod tests {
         }
     }
 
-    const RSS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+    pub const RSS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
     <title>Test Feed</title>
