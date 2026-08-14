@@ -166,7 +166,7 @@ export default function Sidebar() {
 
       {feedsActive && (
         <div className="flex min-h-0 flex-1 flex-col">
-          <section className="flex min-h-0 flex-1 flex-col">
+          <section className="flex min-h-0 flex-col">
             <SectionHeading
               icon={FolderIcon}
               label="Categories"

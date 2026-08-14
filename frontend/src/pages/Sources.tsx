@@ -47,12 +47,12 @@ export default function Sources() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 px-4 pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-4 pt-4">
         <div className="flex items-center gap-2">
           <ServerStackIcon className="h-5 w-5 text-app-text-muted" />
           <h2 className="text-lg font-semibold">Sources</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <OpmlButtons />
           <Button size="sm" variant="primary" onPress={() => setAddOpen(true)}>
             <PlusIcon className="h-4 w-4" />

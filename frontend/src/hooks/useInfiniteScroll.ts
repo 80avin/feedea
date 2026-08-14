@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
+import type { RefObject } from "react";
 
 export function useInfiniteScroll(
   onBottom: () => void,
-  options?: { rootMargin?: string },
+  options?: { rootMargin?: string; rootRef?: RefObject<HTMLElement | null> },
 ): (node: Element | null) => void {
   const onBottomRef = useRef(onBottom);
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -30,7 +31,7 @@ export function useInfiniteScroll(
               }
             }
           },
-          { rootMargin },
+          { root: options?.rootRef?.current ?? null, rootMargin },
         );
         observerRef.current = observer;
       }
@@ -42,6 +43,6 @@ export function useInfiniteScroll(
         observer.observe(node);
       }
     },
-    [rootMargin],
+    [rootMargin, options?.rootRef],
   );
 }

@@ -14,7 +14,7 @@ import { flattenCategories } from "../utils/categories";
 import { AVATAR_COLORS, avatarColorOverride, setAvatarColorOverride } from "../utils/avatarColor";
 import { formatError } from "./Feedback";
 
-function RenameDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolean; onClose: () => void }) {
+export function RenameDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolean; onClose: () => void }) {
   const state = useOverlayState({
     isOpen: open,
     onOpenChange: (isOpen) => {
@@ -128,7 +128,7 @@ function RenameDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolea
   );
 }
 
-function DeleteDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolean; onClose: () => void }) {
+export function DeleteDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolean; onClose: () => void }) {
   const state = useOverlayState({
     isOpen: open,
     onOpenChange: (isOpen) => {

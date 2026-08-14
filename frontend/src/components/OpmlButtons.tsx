@@ -42,7 +42,7 @@ export default function OpmlButtons() {
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="relative flex flex-wrap items-center gap-2">
       <input
         ref={fileRef}
         type="file"
@@ -61,7 +61,11 @@ export default function OpmlButtons() {
         <ArrowDownTrayIcon className="h-4 w-4" />
         Export
       </Button>
-      {status && <span className="max-w-40 truncate text-xs text-app-text-faint">{status}</span>}
+      {status && (
+        <span className="absolute right-0 top-full z-10 mt-1 max-w-48 truncate rounded-md border border-app-border bg-app-bg px-2 py-1 text-xs text-app-text-faint shadow-lg">
+          {status}
+        </span>
+      )}
     </div>
   );
 }
