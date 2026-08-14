@@ -27,12 +27,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn scheduler_updates_last_sync() {
+    async fn scheduler_syncs_feed() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
         let server = crate::engine::tests::FeedServer::start(
             crate::engine::tests::RSS.to_string(),
             6,
         );
-        let dir = std::env::temp_dir().join(format!("rssea-sched-test-{}", std::process::id()));
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "rssea-sched-test-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
         let engine = Engine::new(&config).await.unwrap();

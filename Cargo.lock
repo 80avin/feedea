@@ -3592,6 +3592,7 @@ dependencies = [
  "axum",
  "chrono",
  "clap",
+ "diesel",
  "http-body-util",
  "news-flash",
  "reqwest",

@@ -35,7 +35,11 @@ pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams
 }
 
 pub async fn detail(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<ArticleDetail>> {
-    state.engine.get_article_detail(&id).await.map(Json).map_err(ApiError::from)
+    match state.engine.get_article_detail(&id).await {
+        Ok(article) => Ok(Json(article)),
+        Err(error) if crate::engine::is_not_found(&error) => Err(ApiError::not_found("article not found")),
+        Err(error) => Err(ApiError::from(error)),
+    }
 }
 
 pub async fn favicon(State(state): State<AppState>, Path(feed_id): Path<String>) -> Response {

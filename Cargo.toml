@@ -14,6 +14,7 @@ rusqlite = { version = "0.40.2", features = ["bundled"] }
 clap = { version = "4.6.6", features = ["derive", "env"] }
 url = "2.5.8"
 reqwest = "0.13.4"
+diesel = "2"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 chrono = "0.4"

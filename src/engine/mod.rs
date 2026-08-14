@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use news_flash::error::NewsFlashError;
+use news_flash::error::{DatabaseError, NewsFlashError};
 use news_flash::feed_api::FeedHeaderMap;
 use news_flash::models::{ArticleFilter, CategoryID, FeedID, Marked, PluginID, Read, Url};
 use news_flash::NewsFlash;
@@ -59,10 +59,6 @@ impl Engine {
         self.mutation_lock.lock().await
     }
 
-    pub async fn last_sync(&self) -> chrono::DateTime<chrono::Utc> {
-        self.nf.last_sync().await
-    }
-
     pub async fn add_feed(
         &self,
         url: &str,
@@ -73,6 +69,10 @@ impl Engine {
         let category_id = category_id.map(|c| CategoryID::new(&c));
         let _guard = self.mutation_guard().await;
         let (feed, feed_mapping, _, _) = self.nf.add_feed(&url, title, category_id, &self.client).await?;
+        let feed_id = feed.feed_id.clone();
+        if let Err(error) = self.nf.fetch_feed(&feed_id, &self.client, reqwest::header::HeaderMap::new()).await {
+            tracing::warn!(%error, "initial sync of new feed failed");
+        }
         Ok(FeedSummary {
             id: feed.feed_id.as_str().to_string(),
             title: feed.label,
@@ -186,6 +186,7 @@ impl Engine {
 
     pub async fn get_article_thumbnail(&self, article_id: &str) -> anyhow::Result<Option<(String, Vec<u8>)>> {
         let article_id = news_flash::models::ArticleID::new(article_id);
+        let _guard = self.mutation_guard().await;
         match self.nf.get_article_thumbnail(&article_id, &self.client).await? {
             Some(thumbnail) => {
                 let format = thumbnail.format.unwrap_or_else(|| "image/jpeg".to_string());
@@ -194,6 +195,13 @@ impl Engine {
             None => Ok(None),
         }
     }
+}
+
+pub fn is_not_found(error: &anyhow::Error) -> bool {
+    matches!(
+        error.downcast_ref::<NewsFlashError>(),
+        Some(NewsFlashError::Database(DatabaseError::Query(diesel::result::Error::NotFound)))
+    )
 }
 
 #[cfg(test)]
@@ -319,10 +327,10 @@ pub mod tests {
         let engine = Engine::new(&config).await.unwrap();
         let feed = engine.add_feed(&server.url, Some("Test Feed".into()), None).await.unwrap();
         assert_eq!(feed.title, "Test Feed");
-        let counts = engine.sync_all().await.unwrap();
-        assert_eq!(counts.get(&server.url).copied(), Some(2));
         let article_count = engine.with_nf(|nf| nf.get_article_ids(news_flash::models::ArticleFilter::default()).map(|v| v.len())).await.unwrap();
         assert_eq!(article_count, 2);
+        let counts = engine.sync_all().await.unwrap();
+        assert_eq!(counts.get(&server.url).copied(), Some(0));
         let counts2 = engine.sync_all().await.unwrap();
         assert_eq!(counts2.get(&server.url).copied(), Some(0));
         server.stop();
