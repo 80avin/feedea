@@ -32,6 +32,33 @@ impl AppDb {
         let mut rows = stmt.query(rusqlite::params![key])?;
         Ok(rows.next()?.map(|r| r.get(0)).transpose()?)
     }
+
+    pub fn create_session(&mut self, token_hash: &str, expires_at: &str) -> anyhow::Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO sessions (token_hash, created_at, expires_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![token_hash, chrono::Utc::now().to_rfc3339(), expires_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_session(&mut self, token_hash: &str) -> anyhow::Result<()> {
+        self.conn.execute("DELETE FROM sessions WHERE token_hash = ?1", rusqlite::params![token_hash])?;
+        Ok(())
+    }
+
+    pub fn session_exists(&self, token_hash: &str) -> anyhow::Result<bool> {
+        let mut stmt = self.conn.prepare("SELECT 1 FROM sessions WHERE token_hash = ?1 AND expires_at > ?2")?;
+        let mut rows = stmt.query(rusqlite::params![token_hash, chrono::Utc::now().to_rfc3339()])?;
+        Ok(rows.next()?.is_some())
+    }
+
+    pub fn password_hash(&self) -> anyhow::Result<Option<String>> {
+        self.get_setting("password_hash")
+    }
+
+    pub fn set_password_hash(&mut self, hash: &str) -> anyhow::Result<()> {
+        self.set_setting("password_hash", hash)
+    }
 }
 
 #[cfg(test)]
@@ -59,6 +86,39 @@ mod tests {
         db.set_setting("theme", "dark").unwrap();
         assert_eq!(db.get_setting("theme").unwrap(), Some("dark".to_string()));
         assert_eq!(db.get_setting("missing").unwrap(), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn session_create_exists_delete_roundtrip() {
+        let dir = tmp_dir();
+        let mut db = open(&dir).unwrap();
+        let future = chrono::Utc::now() + chrono::Duration::hours(1);
+        assert!(!db.session_exists("tok-hash").unwrap());
+        db.create_session("tok-hash", &future.to_rfc3339()).unwrap();
+        assert!(db.session_exists("tok-hash").unwrap());
+        db.delete_session("tok-hash").unwrap();
+        assert!(!db.session_exists("tok-hash").unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn expired_session_does_not_exist() {
+        let dir = tmp_dir();
+        let mut db = open(&dir).unwrap();
+        let past = chrono::Utc::now() - chrono::Duration::seconds(1);
+        db.create_session("stale", &past.to_rfc3339()).unwrap();
+        assert!(!db.session_exists("stale").unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn password_hash_roundtrip() {
+        let dir = tmp_dir();
+        let mut db = open(&dir).unwrap();
+        assert_eq!(db.password_hash().unwrap(), None);
+        db.set_password_hash("argon2hash").unwrap();
+        assert_eq!(db.password_hash().unwrap(), Some("argon2hash".to_string()));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

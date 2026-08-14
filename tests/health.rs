@@ -1,10 +1,13 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
+use rssea::app_db;
 use rssea::config::Config;
 use rssea::engine::Engine;
 use rssea::AppState;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -17,7 +20,8 @@ async fn health_returns_ok_with_version() {
         port: 3000,
     };
     let engine = Engine::new(&cfg).await.unwrap();
-    let app = rssea::api::router(AppState { engine });
+    let app_db = Arc::new(Mutex::new(app_db::open(&cfg.data_dir).unwrap()));
+    let app = rssea::api::router(AppState { engine, app_db });
     let response = app
         .oneshot(
             Request::builder()

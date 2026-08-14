@@ -2,9 +2,13 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use rssea::api;
+use rssea::app_db;
+use rssea::auth;
 use rssea::config::Config;
 use rssea::engine::Engine;
 use rssea::AppState;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tower::ServiceExt;
 
 const RSS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -50,17 +54,39 @@ async fn spawn_app() -> (String, axum::Router, feed_server::FeedServer) {
     let _ = std::fs::remove_dir_all(&dir);
     let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
     let engine = Engine::new(&config).await.unwrap();
-    let router = api::router(AppState { engine: engine.clone() });
+    let mut db = app_db::open(&config.data_dir).unwrap();
+    db.set_password_hash(&auth::hash_password("test-pass").unwrap()).unwrap();
+    let app_db = Arc::new(Mutex::new(db));
+    let router = api::router(AppState { engine: engine.clone(), app_db });
     (server.url.clone(), router, server)
+}
+
+async fn login_cookie(app: &axum::Router) -> String {
+    let resp = app.clone()
+        .oneshot(Request::builder().method("POST").uri("/api/login")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"password":"test-pass"}"#))
+            .unwrap())
+        .await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    resp.headers().get(axum::http::header::SET_COOKIE)
+        .expect("login should set a session cookie")
+        .to_str().unwrap().to_string()
+}
+
+fn cookie_pair(set_cookie: &str) -> String {
+    set_cookie.split(';').next().unwrap().to_string()
 }
 
 #[tokio::test]
 async fn add_source_sync_and_read_articles() {
     let (feed_url, app, _server) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
 
     let add_resp = app.clone()
         .oneshot(Request::builder().method("POST").uri("/api/sources")
             .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
             .body(Body::from(format!(r#"{{"url":"{feed_url}","title":"API Feed"}}"#)))
             .unwrap())
         .await.unwrap();
@@ -73,6 +99,7 @@ async fn add_source_sync_and_read_articles() {
     let refresh_resp = app.clone()
         .oneshot(Request::builder().method("POST")
             .uri("/api/sources/refresh-all")
+            .header(axum::http::header::COOKIE, &cookie)
             .body(Body::empty()).unwrap())
         .await.unwrap();
     assert_eq!(refresh_resp.status(), StatusCode::OK);
@@ -80,6 +107,7 @@ async fn add_source_sync_and_read_articles() {
     let single_resp = app.clone()
         .oneshot(Request::builder().method("POST")
             .uri(format!("/api/sources/{}/refresh", url_encode(&feed_id)))
+            .header(axum::http::header::COOKIE, &cookie)
             .body(Body::empty()).unwrap())
         .await.unwrap();
     assert_eq!(single_resp.status(), StatusCode::OK);
@@ -88,7 +116,9 @@ async fn add_source_sync_and_read_articles() {
     assert_eq!(json["new_articles"], 0);
 
     let list_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
         .await.unwrap();
     assert_eq!(list_resp.status(), StatusCode::OK);
     let body = list_resp.into_body().collect().await.unwrap().to_bytes();
@@ -99,7 +129,9 @@ async fn add_source_sync_and_read_articles() {
 
     let id = arr[0]["id"].as_str().unwrap().to_string();
     let detail_resp = app.clone()
-        .oneshot(Request::builder().uri(format!("/api/articles/{id}")).body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri(format!("/api/articles/{id}"))
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
         .await.unwrap();
     assert_eq!(detail_resp.status(), StatusCode::OK);
 }
@@ -107,8 +139,11 @@ async fn add_source_sync_and_read_articles() {
 #[tokio::test]
 async fn detail_unknown_article_returns_404() {
     let (_feed_url, app, _server) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
     let resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles/does-not-exist").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/api/articles/does-not-exist")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
         .await.unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     let body = resp.into_body().collect().await.unwrap().to_bytes();
@@ -119,9 +154,11 @@ async fn detail_unknown_article_returns_404() {
 #[tokio::test]
 async fn add_source_with_invalid_url_returns_400() {
     let (_feed_url, app, _server) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
     let resp = app.clone()
         .oneshot(Request::builder().method("POST").uri("/api/sources")
             .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
             .body(Body::from(r#"{"url":"not a url"}"#))
             .unwrap())
         .await.unwrap();
@@ -131,9 +168,11 @@ async fn add_source_with_invalid_url_returns_400() {
 #[tokio::test]
 async fn refresh_unknown_feed_returns_404() {
     let (_feed_url, app, _server) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
     let resp = app.clone()
         .oneshot(Request::builder().method("POST")
             .uri("/api/sources/does-not-exist/refresh")
+            .header(axum::http::header::COOKIE, &cookie)
             .body(Body::empty()).unwrap())
         .await.unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
