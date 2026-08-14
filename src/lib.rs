@@ -2,6 +2,7 @@ pub mod api;
 pub mod app_db;
 pub mod auth;
 pub mod config;
+pub mod dto;
 pub mod engine;
 
 use config::Config;
