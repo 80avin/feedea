@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { encodeId } from "../api/client";
 import type { Headline } from "../api/types";
-import FeedContextMenu from "./FeedContextMenu";
+import FeedContextMenu, { useFeedSummary } from "./FeedContextMenu";
+import { DeleteDialog, RenameDialog } from "./SourceMenu";
 import { useContextMenu } from "../hooks/useContextMenu";
 
 function formatDate(iso: string): string {
@@ -12,7 +13,9 @@ function formatDate(iso: string): string {
 
 export default function ArticleListItem({ item, hideFeed }: { item: Headline; hideFeed?: boolean }) {
   const [thumbFailed, setThumbFailed] = useState(false);
+  const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
   const { position, close, menuRef, triggerProps } = useContextMenu();
+  const feed = useFeedSummary(item.feed_id, item.feed_title ?? "");
   return (
     <>
       <Link to={`/feeds/${encodeId(item.id)}`} className="block hover:bg-app-surface/60" {...triggerProps}>
@@ -38,13 +41,16 @@ export default function ArticleListItem({ item, hideFeed }: { item: Headline; hi
       </Link>
       {position && (
         <FeedContextMenu
-          feedId={item.feed_id}
-          feedTitle={item.feed_title}
+          feed={feed}
           position={position}
           menuRef={menuRef}
           onClose={close}
+          onEdit={() => setDialog("rename")}
+          onDelete={() => setDialog("delete")}
         />
       )}
+      <RenameDialog feed={feed} open={dialog === "rename"} onClose={() => setDialog(null)} />
+      <DeleteDialog feed={feed} open={dialog === "delete"} onClose={() => setDialog(null)} />
     </>
   );
 }

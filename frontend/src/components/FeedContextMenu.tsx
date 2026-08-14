@@ -9,9 +9,8 @@ import {
 import type { FeedSummary } from "../api/types";
 import { useFeedRead, useRefreshFeed, useSources } from "../state/hooks";
 import type { ContextMenuPosition } from "../hooks/useContextMenu";
-import { DeleteDialog, RenameDialog } from "./SourceMenu";
 
-function useFeedSummary(feedId: string, fallbackTitle: string): FeedSummary {
+export function useFeedSummary(feedId: string, fallbackTitle: string): FeedSummary {
   const { data } = useSources();
   return useMemo(() => {
     const all = data?.groups.flatMap((group) => group.feeds) ?? [];
@@ -32,23 +31,22 @@ function useFeedSummary(feedId: string, fallbackTitle: string): FeedSummary {
 }
 
 export default function FeedContextMenu({
-  feedId,
-  feedTitle,
+  feed,
   position,
   menuRef,
   onClose,
+  onEdit,
+  onDelete,
 }: {
-  feedId: string;
-  feedTitle: string | null;
+  feed: FeedSummary;
   position: ContextMenuPosition;
   menuRef: React.RefObject<HTMLDivElement | null>;
   onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
-  const feed = useFeedSummary(feedId, feedTitle ?? "");
   const refresh = useRefreshFeed();
   const markRead = useFeedRead();
-  const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const website = feed.website ?? feed.feed_url;
   const itemRef = useRef<HTMLDivElement>(null);
   const [clamped, setClamped] = useState(position);
@@ -73,72 +71,68 @@ export default function FeedContextMenu({
     "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-app-text-2 hover:bg-app-hover hover:text-app-text disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <>
-      <div
-        ref={(node) => {
-          menuRef.current = node;
-          itemRef.current = node;
+    <div
+      ref={(node) => {
+        menuRef.current = node;
+        itemRef.current = node;
+      }}
+      data-context-menu
+      role="menu"
+      className="fixed z-50 min-w-44 rounded-md border border-app-border-strong bg-app-bg py-1 shadow-xl"
+      style={{ left: clamped.x, top: clamped.y }}
+    >
+      <button type="button" role="menuitem" className={itemClass} disabled={!website} onClick={openSite}>
+        <ArrowTopRightOnSquareIcon className="h-4 w-4 shrink-0" />
+        Open
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className={itemClass}
+        onClick={() => {
+          onEdit();
+          onClose();
         }}
-        data-context-menu
-        role="menu"
-        className="fixed z-50 min-w-44 rounded-md border border-app-border-strong bg-app-bg py-1 shadow-xl"
-        style={{ left: clamped.x, top: clamped.y }}
       >
-        <button type="button" role="menuitem" className={itemClass} disabled={!website} onClick={openSite}>
-          <ArrowTopRightOnSquareIcon className="h-4 w-4 shrink-0" />
-          Open
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          className={itemClass}
-          onClick={() => {
-            setEditOpen(true);
-            onClose();
-          }}
-        >
-          <PencilIcon className="h-4 w-4 shrink-0" />
-          Edit
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          className={itemClass}
-          onClick={() => {
-            refresh.mutate({ id: feed.id });
-            onClose();
-          }}
-        >
-          <ArrowPathIcon className="h-4 w-4 shrink-0" />
-          Refresh
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          className={itemClass}
-          onClick={() => {
-            markRead.mutate({ id: feed.id });
-            onClose();
-          }}
-        >
-          <CheckCircleIcon className="h-4 w-4 shrink-0" />
-          Mark all read
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          className={`${itemClass} text-red-600 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400`}
-          onClick={() => {
-            setDeleteOpen(true);
-            onClose();
-          }}
-        >
-          <TrashIcon className="h-4 w-4 shrink-0" />
-          Delete
-        </button>
-      </div>
-      <RenameDialog feed={feed} open={editOpen} onClose={() => setEditOpen(false)} />
-      <DeleteDialog feed={feed} open={deleteOpen} onClose={() => setDeleteOpen(false)} />
-    </>
+        <PencilIcon className="h-4 w-4 shrink-0" />
+        Edit
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className={itemClass}
+        onClick={() => {
+          refresh.mutate({ id: feed.id });
+          onClose();
+        }}
+      >
+        <ArrowPathIcon className="h-4 w-4 shrink-0" />
+        Refresh
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className={itemClass}
+        onClick={() => {
+          markRead.mutate({ id: feed.id });
+          onClose();
+        }}
+      >
+        <CheckCircleIcon className="h-4 w-4 shrink-0" />
+        Mark all read
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className={`${itemClass} text-red-600 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400`}
+        onClick={() => {
+          onDelete();
+          onClose();
+        }}
+      >
+        <TrashIcon className="h-4 w-4 shrink-0" />
+        Delete
+      </button>
+    </div>
   );
 }

@@ -4,12 +4,15 @@ import type { Headline } from "../api/types";
 import { encodeId } from "../api/client";
 import { formatAge } from "../utils/format";
 import FeedAvatar from "./FeedAvatar";
-import FeedContextMenu from "./FeedContextMenu";
+import FeedContextMenu, { useFeedSummary } from "./FeedContextMenu";
+import { DeleteDialog, RenameDialog } from "./SourceMenu";
 import { useContextMenu } from "../hooks/useContextMenu";
 
 function TimelineItem({ item }: { item: Headline }) {
   const [thumbFailed, setThumbFailed] = useState(false);
+  const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
   const { position, close, menuRef, triggerProps } = useContextMenu();
+  const feed = useFeedSummary(item.feed_id, item.feed_title ?? "");
 
   return (
     <>
@@ -45,13 +48,16 @@ function TimelineItem({ item }: { item: Headline }) {
       </Link>
       {position && (
         <FeedContextMenu
-          feedId={item.feed_id}
-          feedTitle={item.feed_title}
+          feed={feed}
           position={position}
           menuRef={menuRef}
           onClose={close}
+          onEdit={() => setDialog("rename")}
+          onDelete={() => setDialog("delete")}
         />
       )}
+      <RenameDialog feed={feed} open={dialog === "rename"} onClose={() => setDialog(null)} />
+      <DeleteDialog feed={feed} open={dialog === "delete"} onClose={() => setDialog(null)} />
     </>
   );
 }
