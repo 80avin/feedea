@@ -157,6 +157,102 @@ impl Engine {
         Ok(out)
     }
 
+    pub async fn add_category(&self, name: &str, parent: Option<&str>) -> anyhow::Result<String> {
+        let _guard = self.mutation_guard().await;
+        let parent = parent.map(news_flash::models::CategoryID::new);
+        let (category, _) = self.nf.add_category(name, parent.as_ref(), &self.client).await?;
+        Ok(category.category_id.as_str().to_string())
+    }
+
+    pub async fn rename_category(&self, id: &str, name: &str) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        self.nf.rename_category(&news_flash::models::CategoryID::new(id), name, &self.client).await?;
+        Ok(())
+    }
+
+    pub async fn remove_category(&self, id: &str, remove_children: bool) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        self.nf.remove_category(&news_flash::models::CategoryID::new(id), remove_children, &self.client).await?;
+        Ok(())
+    }
+
+    pub async fn move_category(&self, id: &str, parent_id: &str) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        let mapping = news_flash::models::CategoryMapping {
+            parent_id: news_flash::models::CategoryID::new(parent_id),
+            category_id: news_flash::models::CategoryID::new(id),
+            sort_index: Some(i32::MAX),
+        };
+        self.nf.move_category(&mapping, &self.client).await?;
+        Ok(())
+    }
+
+    pub async fn mark_category_read(&self, id: &str) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        self.nf.set_category_read(&[news_flash::models::CategoryID::new(id)], &self.client).await?;
+        Ok(())
+    }
+
+    pub async fn category_article_ids(&self, category_id: &str) -> anyhow::Result<Vec<String>> {
+        let id = news_flash::models::CategoryID::new(category_id);
+        let filter = news_flash::models::ArticleFilter {
+            categories: Some(vec![id]),
+            ..news_flash::models::ArticleFilter::default()
+        };
+        let ids = self.with_nf(move |nf| nf.get_article_ids(filter)).await?;
+        Ok(ids.into_iter().map(|a| a.as_str().to_string()).collect())
+    }
+
+    pub async fn get_category_tree(&self) -> anyhow::Result<Vec<crate::dto::CategoryNode>> {
+        let (categories, mappings) = self.get_categories().await?;
+        let unread = self.category_unread_map().await?;
+        let mut children_by_parent: HashMap<String, Vec<news_flash::models::CategoryID>> = HashMap::new();
+        for mapping in mappings {
+            children_by_parent
+                .entry(mapping.parent_id.as_str().to_string())
+                .or_default()
+                .push(mapping.category_id);
+        }
+        let name_by_id: HashMap<String, String> = categories
+            .into_iter()
+            .map(|c| (c.category_id.as_str().to_string(), c.label))
+            .collect();
+
+        fn build(
+            parent_id: &str,
+            children_by_parent: &HashMap<String, Vec<news_flash::models::CategoryID>>,
+            name_by_id: &HashMap<String, String>,
+            unread: &HashMap<String, i64>,
+            depth: usize,
+        ) -> Vec<crate::dto::CategoryNode> {
+            if depth >= 100 {
+                return Vec::new();
+            }
+            let mut nodes = Vec::new();
+            if let Some(children) = children_by_parent.get(parent_id) {
+                for child in children {
+                    let id = child.as_str().to_string();
+                    nodes.push(crate::dto::CategoryNode {
+                        category_id: id.clone(),
+                        name: name_by_id.get(&id).cloned().unwrap_or_default(),
+                        parent_id: parent_id.to_string(),
+                        unread_count: unread.get(&id).copied().unwrap_or(0),
+                        children: build(&id, children_by_parent, name_by_id, unread, depth + 1),
+                    });
+                }
+            }
+            nodes
+        }
+
+        Ok(build(
+            news_flash::models::NEWSFLASH_TOPLEVEL.as_str(),
+            &children_by_parent,
+            &name_by_id,
+            &unread,
+            0,
+        ))
+    }
+
     pub async fn get_headlines(&self, filter: ArticleFilter) -> anyhow::Result<Vec<Headline>> {
         let articles = self.with_nf(|nf| nf.get_fat_articles(filter)).await?;
         let feed_titles: HashMap<String, String> = self

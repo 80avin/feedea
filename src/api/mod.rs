@@ -1,5 +1,6 @@
 pub mod articles;
 pub mod auth;
+pub mod categories;
 pub mod error;
 pub mod feeds;
 pub mod health;
@@ -11,7 +12,7 @@ pub mod sources;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use serde_json::json;
 
@@ -39,6 +40,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/articles/{id}/save", post(saved::save).put(saved::save).delete(saved::unsave))
         .route("/api/saved", get(saved::list))
         .route("/api/tags", get(saved::tags))
+        .route("/api/categories", get(categories::list).post(categories::create))
+        .route("/api/categories/{id}", patch(categories::update).delete(categories::remove))
+        .route("/api/categories/{id}/read", post(categories::mark_read))
         .route("/api/favicon/{feed_id}", get(articles::favicon))
         .route("/api/thumbnail/{article_id}", get(articles::thumbnail))
         .route("/api/sources", post(sources::add))

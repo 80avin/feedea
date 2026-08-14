@@ -23,6 +23,15 @@ pub struct CategoryCard {
 }
 
 #[derive(Serialize, Debug, Clone)]
+pub struct CategoryNode {
+    pub category_id: String,
+    pub name: String,
+    pub parent_id: String,
+    pub unread_count: i64,
+    pub children: Vec<CategoryNode>,
+}
+
+#[derive(Serialize, Debug, Clone)]
 pub struct Headline {
     pub id: String,
     pub title: Option<String>,
