@@ -179,6 +179,7 @@ impl Engine {
                 thumbnail_url: a.thumbnail_url,
                 unread: a.unread == Read::Unread,
                 marked: a.marked == Marked::Marked,
+                note: None,
             });
         }
         Ok(out)
@@ -209,6 +210,14 @@ impl Engine {
         self.search(q, 8).await
     }
 
+    pub async fn mark_article_saved(&self, id: &str, saved: bool) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        let article_id = news_flash::models::ArticleID::new(id);
+        let marked = if saved { news_flash::models::Marked::Marked } else { news_flash::models::Marked::Unmarked };
+        self.nf.set_article_marked(&[article_id], marked, &self.client).await?;
+        Ok(())
+    }
+
     pub async fn get_article_detail(&self, article_id: &str) -> anyhow::Result<ArticleDetail> {
         let id = news_flash::models::ArticleID::new(article_id);
         let a = self.with_nf(move |nf| nf.get_fat_article(&id)).await?;
@@ -233,6 +242,8 @@ impl Engine {
             marked: a.marked == Marked::Marked,
             thumbnail_url: a.thumbnail_url,
             plain_text: a.plain_text,
+            note: None,
+            tags: Vec::new(),
         })
     }
     pub async fn get_favicon(&self, feed_id: &str) -> anyhow::Result<Option<(String, Vec<u8>)>> {

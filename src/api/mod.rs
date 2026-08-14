@@ -4,6 +4,7 @@ pub mod error;
 pub mod feeds;
 pub mod health;
 pub mod overview;
+pub mod saved;
 pub mod search;
 pub mod sources;
 
@@ -35,6 +36,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/articles", get(articles::list))
         .route("/api/search/suggestions", get(search::suggestions))
         .route("/api/articles/{id}", get(articles::detail))
+        .route("/api/articles/{id}/save", post(saved::save).put(saved::save).delete(saved::unsave))
+        .route("/api/saved", get(saved::list))
+        .route("/api/tags", get(saved::tags))
         .route("/api/favicon/{feed_id}", get(articles::favicon))
         .route("/api/thumbnail/{article_id}", get(articles::thumbnail))
         .route("/api/sources", post(sources::add))

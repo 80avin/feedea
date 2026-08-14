@@ -69,6 +69,58 @@ impl AppDb {
         }
         Ok(out)
     }
+
+    pub fn save_article(&mut self, article_id: &str, note: Option<&str>, tags: &[String]) -> anyhow::Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT OR REPLACE INTO saved (article_id, saved_at, note, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![article_id, now, note, now],
+        )?;
+        self.conn.execute("DELETE FROM saved_tags WHERE article_id = ?1", rusqlite::params![article_id])?;
+        for tag in tags {
+            self.conn.execute("INSERT OR IGNORE INTO tags (tag) VALUES (?1)", rusqlite::params![tag])?;
+            self.conn.execute("INSERT OR REPLACE INTO saved_tags (article_id, tag) VALUES (?1, ?2)", rusqlite::params![article_id, tag])?;
+        }
+        Ok(())
+    }
+
+    pub fn unsave_article(&mut self, article_id: &str) -> anyhow::Result<()> {
+        self.conn.execute("DELETE FROM saved WHERE article_id = ?1", rusqlite::params![article_id])?;
+        self.conn.execute("DELETE FROM saved_tags WHERE article_id = ?1", rusqlite::params![article_id])?;
+        Ok(())
+    }
+
+    pub fn saved_articles(&self, offset: i64, limit: i64) -> anyhow::Result<(Vec<(String, String)>, i64)> {
+        let total: i64 = self.conn.query_row("SELECT COUNT(*) FROM saved", [], |r| r.get(0))?;
+        let mut stmt = self.conn.prepare("SELECT article_id, saved_at FROM saved ORDER BY saved_at DESC LIMIT ?1 OFFSET ?2")?;
+        let mut rows = stmt.query(rusqlite::params![limit, offset])?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            out.push((row.get(0)?, row.get(1)?));
+        }
+        Ok((out, total))
+    }
+
+    pub fn note_and_tags(&self, article_id: &str) -> anyhow::Result<(Option<String>, Vec<String>)> {
+        let note: Option<String> = self.conn.query_row("SELECT note FROM saved WHERE article_id = ?1", rusqlite::params![article_id], |r| r.get(0)).unwrap_or(None);
+        let mut stmt = self.conn.prepare("SELECT tag FROM saved_tags WHERE article_id = ?1 ORDER BY tag")?;
+        let mut rows = stmt.query(rusqlite::params![article_id])?;
+        let mut tags = Vec::new();
+        while let Some(row) = rows.next()? {
+            tags.push(row.get(0)?);
+        }
+        Ok((note, tags))
+    }
+
+    pub fn all_tags(&self) -> anyhow::Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT tag FROM tags ORDER BY tag")?;
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            out.push(row.get(0)?);
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]

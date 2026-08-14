@@ -59,7 +59,12 @@ pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams
 
 pub async fn detail(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<ArticleDetail>> {
     match state.engine.get_article_detail(&id).await {
-        Ok(article) => Ok(Json(article)),
+        Ok(mut article) => {
+            let (note, tags) = state.app_db.lock().await.note_and_tags(&id)?;
+            article.note = note;
+            article.tags = tags;
+            Ok(Json(article))
+        }
         Err(error) if crate::engine::is_not_found(&error) => Err(ApiError::not_found("article not found")),
         Err(error) => Err(ApiError::from(error)),
     }

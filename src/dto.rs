@@ -34,6 +34,8 @@ pub struct Headline {
     pub thumbnail_url: Option<String>,
     pub unread: bool,
     pub marked: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 #[derive(Serialize, Debug)]
@@ -51,4 +53,6 @@ pub struct ArticleDetail {
     pub marked: bool,
     pub thumbnail_url: Option<String>,
     pub plain_text: Option<String>,
+    pub note: Option<String>,
+    pub tags: Vec<String>,
 }
