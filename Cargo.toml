@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1"
 news-flash = "3.2.0"
 axum = "0.8.9"
 tokio = { version = "1.53.1", features = ["full"] }
