@@ -67,3 +67,66 @@ export interface Settings {
   keep_articles_days: number | null;
   stats: SettingsStats;
 }
+
+export interface ArticleDetail {
+  id: string;
+  title: string | null;
+  author: string | null;
+  feed_id: string;
+  feed_title: string | null;
+  url: string | null;
+  date: string;
+  html: string | null;
+  summary: string | null;
+  unread: boolean;
+  marked: boolean;
+  thumbnail_url: string | null;
+  plain_text: string | null;
+  note: string | null;
+  tags: string[];
+}
+
+export interface CategoryNode {
+  category_id: string;
+  name: string;
+  parent_id: string;
+  unread_count: number;
+  children: CategoryNode[];
+}
+
+export interface CategoriesResponse {
+  categories: CategoryNode[];
+}
+
+export interface SourceGroup {
+  category_id: string;
+  category_name: string;
+  feeds: FeedSummary[];
+}
+
+export interface SourcesResponse {
+  groups: SourceGroup[];
+}
+
+export interface MonthGroup {
+  month: string;
+  items: Headline[];
+}
+
+export interface SavedResponse {
+  months: MonthGroup[];
+  total: number;
+}
+
+export interface TagsResponse {
+  tags: string[];
+}
+
+export interface ArticleQueryParams {
+  feed?: string;
+  category?: string;
+  saved?: string;
+  unread?: string;
+  tag?: string;
+  search?: string;
+}
