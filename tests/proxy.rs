@@ -27,6 +27,10 @@ struct ByteServer {
 
 impl ByteServer {
     fn start(png: &'static [u8]) -> ByteServer {
+        ByteServer::start_with_status(png, 200)
+    }
+
+    fn start_with_status(png: &'static [u8], status: u16) -> ByteServer {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let addr = listener.local_addr().unwrap();
@@ -41,9 +45,12 @@ impl ByteServer {
                         let _ = stream.set_nonblocking(false);
                         let mut buf = [0u8; 4096];
                         let _ = stream.read(&mut buf);
+                        let reason = if status == 200 { "OK" } else { "Not Found" };
                         let header = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                            png.len()
+                            "HTTP/1.1 {status} {reason}\r\nContent-Type: image/png\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n",
+                            status = status,
+                            reason = reason,
+                            len = png.len()
                         );
                         let _ = stream.write_all(header.as_bytes());
                         let _ = stream.write_all(png);
@@ -84,6 +91,7 @@ fn url_encode(s: &str) -> String {
 }
 
 async fn spawn_app() -> axum::Router {
+    rssea::proxy::set_allow_private_proxy(true);
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
         "rssea-proxy-test-{}-{}",
@@ -132,6 +140,18 @@ async fn proxy_rejects_missing_u() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn proxy_upstream_404_is_502() {
+    let server = ByteServer::start_with_status(PNG, 404);
+    let app = spawn_app().await;
+    let uri = format!("/img?u={}", url_encode(&server.url));
+    let resp = app.clone()
+        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
 }
 
 #[tokio::test]

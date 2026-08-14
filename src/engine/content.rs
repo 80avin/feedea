@@ -35,6 +35,9 @@ pub fn rewrite_html(html: &str, base_url: &str) -> String {
         .filter_map(|img| {
             let src = img.value().attr("src")?;
             let abs = base.join(src).ok()?;
+            if abs.scheme() != "http" && abs.scheme() != "https" {
+                return None;
+            }
             Some((img.id(), abs.as_str().to_string()))
         })
         .collect();
@@ -88,6 +91,22 @@ mod tests {
         let encoded = percent_encode(b"https://example.com/img.png", NON_ALPHANUMERIC);
         assert!(out.contains(&format!("src=\"/img?u={encoded}\"")), "got: {out}");
         assert!(out.contains(r#"data-original="https://example.com/img.png""#), "got: {out}");
+    }
+
+    #[test]
+    fn data_uri_image_is_not_proxied() {
+        let out = rewrite_html(r#"<img src="data:image/png;base64,AAAA">"#, BASE);
+        assert!(out.contains(r#"src="data:image/png;base64,AAAA""#), "got: {out}");
+        assert!(!out.contains("/img?u="), "got: {out}");
+        assert!(!out.contains("data-original"), "got: {out}");
+    }
+
+    #[test]
+    fn non_http_scheme_image_is_not_proxied() {
+        let out = rewrite_html(r#"<img src="ftp://example.com/x.png">"#, BASE);
+        assert!(out.contains(r#"src="ftp://example.com/x.png""#), "got: {out}");
+        assert!(!out.contains("/img?u="), "got: {out}");
+        assert!(!out.contains("data-original"), "got: {out}");
     }
 
     #[test]
