@@ -72,3 +72,20 @@ pub struct ArticleDetail {
     pub note: Option<String>,
     pub tags: Vec<String>,
 }
+
+#[derive(Serialize, Debug)]
+pub struct SettingsStats {
+    pub feeds: usize,
+    pub articles: i64,
+    pub unread: i64,
+    pub database_size_bytes: u64,
+    pub last_sync: String,
+}
+
+#[derive(Serialize, Debug)]
+pub struct Settings {
+    pub theme: Option<String>,
+    pub sync_interval_minutes: i64,
+    pub keep_articles_days: Option<i64>,
+    pub stats: SettingsStats,
+}

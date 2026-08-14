@@ -72,9 +72,24 @@ impl Engine {
         self.mutation_lock.lock().await
     }
 
-    #[cfg(test)]
     pub async fn last_sync(&self) -> chrono::DateTime<chrono::Utc> {
         self.nf.last_sync().await
+    }
+
+    pub async fn keep_articles_days(&self) -> anyhow::Result<Option<i64>> {
+        let dur = self.nf.get_keep_articles_duration().await;
+        Ok(dur.map(|d| d.num_days()))
+    }
+
+    pub async fn set_keep_articles_days(&self, days: Option<i64>) -> anyhow::Result<()> {
+        let dur = days.map(chrono::Duration::days);
+        self.nf.set_keep_articles_duration(dur).await?;
+        Ok(())
+    }
+
+    pub async fn database_size_bytes(&self) -> anyhow::Result<u64> {
+        let size = self.with_nf(|nf| nf.database_size()).await?;
+        Ok(size.on_disk)
     }
 
     pub async fn add_feed(

@@ -52,6 +52,15 @@ impl AppDb {
         Ok(rows.next()?.is_some())
     }
 
+    pub fn theme(&self) -> anyhow::Result<Option<String>> { self.get_setting("theme") }
+    pub fn set_theme(&mut self, theme: &str) -> anyhow::Result<()> { self.set_setting("theme", theme) }
+    pub fn sync_interval_minutes(&self) -> anyhow::Result<i64> {
+        Ok(self.get_setting("sync_interval_minutes")?.and_then(|s| s.parse().ok()).unwrap_or(30))
+    }
+    pub fn set_sync_interval_minutes(&mut self, minutes: i64) -> anyhow::Result<()> {
+        self.set_setting("sync_interval_minutes", &minutes.to_string())
+    }
+
     pub fn password_hash(&self) -> anyhow::Result<Option<String>> {
         self.get_setting("password_hash")
     }
