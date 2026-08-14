@@ -14,7 +14,7 @@ import { ErrorState, LoadingState } from "../components/Feedback";
 function SourceRow({ feed }: { feed: FeedSummary }) {
   return (
     <li className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-app-hover/50">
-      <FeedAvatar feedId={feed.id} title={feed.title} className="h-6 w-6 rounded" />
+      <FeedAvatar feedId={feed.id} title={feed.title} className="h-6 w-6" />
       <Link
         to={`/feeds?feed=${encodeId(feed.id)}`}
         className="min-w-0 flex-1 truncate text-sm text-app-text-2 hover:text-app-text"

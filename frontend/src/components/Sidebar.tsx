@@ -1,10 +1,12 @@
 import type { ComponentType } from "react";
-import { Link, NavLink, useLocation, useNavigate } from "react-router";
+import { useState } from "react";
+import { Link, NavLink, useLocation } from "react-router";
 import { Button, Separator } from "@heroui/react";
 import {
   BookmarkIcon,
   Cog6ToothIcon,
   FolderIcon,
+  PlusIcon,
   QuestionMarkCircleIcon,
   RssIcon,
   ServerStackIcon,
@@ -14,6 +16,9 @@ import clsx from "clsx";
 import { useSession } from "../auth/useSession";
 import { useCategories, useSources } from "../state/hooks";
 import type { CategoryNode } from "../api/types";
+import AddCategoryDialog from "./AddCategoryDialog";
+import AddSourceDialog from "./AddSourceDialog";
+import OpmlImportButton from "./OpmlImportButton";
 
 type Icon = ComponentType<{ className?: string }>;
 
@@ -41,6 +46,48 @@ function NavItem({ to, label, icon: Icon, end }: NavItemProps) {
       <Icon className="h-4 w-4 shrink-0" />
       {label}
     </NavLink>
+  );
+}
+
+function SectionHeading({
+  icon: Icon,
+  label,
+  actions,
+}: {
+  icon: Icon;
+  label: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <h3 className="flex items-center justify-between gap-2 px-4 pb-1 pt-3">
+      <span className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-wider text-app-text-faint">
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{label}</span>
+      </span>
+      {actions && <span className="flex shrink-0 items-center gap-0.5">{actions}</span>}
+    </h3>
+  );
+}
+
+function IconButton({
+  label,
+  icon: Icon,
+  onClick,
+}: {
+  label: string;
+  icon: Icon;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="flex items-center justify-center rounded-md p-1 text-app-text-muted transition-colors hover:bg-app-hover/60 hover:text-app-text"
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </button>
   );
 }
 
@@ -99,15 +146,12 @@ function FeedLink({ id, title, unreadCount }: { id: string; title: string; unrea
 export default function Sidebar() {
   const location = useLocation();
   const { pathname } = location;
-  const navigate = useNavigate();
   const { logout } = useSession();
   const { data: categoriesData } = useCategories();
   const { data: sourcesData } = useSources();
   const feedsActive = pathname.startsWith("/feeds");
-
-  const openSources = () => {
-    navigate("/sources", { state: { backgroundLocation: location } });
-  };
+  const [addSourceOpen, setAddSourceOpen] = useState(false);
+  const [addCategoryOpen, setAddCategoryOpen] = useState(false);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -117,23 +161,19 @@ export default function Sidebar() {
         <NavItem to="/" label="Overview" icon={Squares2X2Icon} end />
         <NavItem to="/feeds" label="Feeds" icon={RssIcon} />
         <NavItem to="/saved" label="Saved" icon={BookmarkIcon} />
-        <button
-          type="button"
-          onClick={openSources}
-          className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-app-text-muted transition-colors hover:bg-app-hover/60 hover:text-app-text"
-        >
-          <ServerStackIcon className="h-4 w-4 shrink-0" />
-          Sources
-        </button>
+        <NavItem to="/sources" label="Sources" icon={ServerStackIcon} />
       </nav>
 
       {feedsActive && (
         <div className="flex min-h-0 flex-1 flex-col">
           <section className="flex min-h-0 flex-1 flex-col">
-            <h3 className="flex items-center gap-2 px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-app-text-faint">
-              <FolderIcon className="h-3.5 w-3.5" />
-              Categories
-            </h3>
+            <SectionHeading
+              icon={FolderIcon}
+              label="Categories"
+              actions={
+                <IconButton label="Add category" icon={PlusIcon} onClick={() => setAddCategoryOpen(true)} />
+              }
+            />
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
               <ul className="flex flex-col gap-0.5">
                 <li>
@@ -152,10 +192,16 @@ export default function Sidebar() {
           </section>
           <Separator />
           <section className="flex min-h-0 flex-1 flex-col">
-            <h3 className="flex items-center gap-2 px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-app-text-faint">
-              <ServerStackIcon className="h-3.5 w-3.5" />
-              Sources
-            </h3>
+            <SectionHeading
+              icon={ServerStackIcon}
+              label="Sources"
+              actions={
+                <>
+                  <OpmlImportButton />
+                  <IconButton label="Add source" icon={PlusIcon} onClick={() => setAddSourceOpen(true)} />
+                </>
+              }
+            />
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
               {sourcesData?.groups.map((group) => (
                 <div key={group.category_id} className="mb-2">
@@ -185,6 +231,9 @@ export default function Sidebar() {
           Log out
         </Button>
       </div>
+
+      <AddSourceDialog open={addSourceOpen} onClose={() => setAddSourceOpen(false)} />
+      <AddCategoryDialog open={addCategoryOpen} onClose={() => setAddCategoryOpen(false)} />
     </div>
   );
 }

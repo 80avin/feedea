@@ -1,5 +1,16 @@
-import { useState } from "react";
-import { encodeId } from "../api/client";
+import { avatarColorFor } from "../utils/avatarColor";
+
+function initials(title: string | null): string {
+  const trimmed = title?.trim();
+  if (!trimmed) {
+    return "?";
+  }
+  const words = trimmed.split(/\s+/);
+  if (words.length === 1) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
 
 export default function FeedAvatar({
   feedId,
@@ -10,24 +21,13 @@ export default function FeedAvatar({
   title: string | null;
   className?: string;
 }) {
-  const [failed, setFailed] = useState(false);
-
-  if (failed) {
-    const letter = (title?.trim()?.[0] ?? "?").toUpperCase();
-    return (
-      <div className={`flex shrink-0 items-center justify-center rounded-full bg-app-surface-2 font-semibold text-app-text-muted ${className ?? ""}`}>
-        {letter}
-      </div>
-    );
-  }
-
   return (
-    <img
-      src={`/api/favicon/${encodeId(feedId)}`}
-      alt=""
-      loading="lazy"
-      onError={() => setFailed(true)}
-      className={`shrink-0 rounded ${className ?? ""}`}
-    />
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-full text-white ${className ?? ""}`}
+      style={{ backgroundColor: avatarColorFor(feedId) }}
+      aria-hidden="true"
+    >
+      <span className="text-[11px] font-semibold leading-none">{initials(title)}</span>
+    </div>
   );
 }

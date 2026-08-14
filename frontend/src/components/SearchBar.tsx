@@ -47,10 +47,11 @@ export default function SearchBar() {
   const showDropdown = open && debounced.trim().length > 0 && suggestions.length > 0;
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative w-full">
       <Input
         aria-label="Search articles"
         type="search"
+        fullWidth
         placeholder="Search articles…"
         value={value}
         onChange={(e) => {

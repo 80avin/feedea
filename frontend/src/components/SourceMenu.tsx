@@ -11,6 +11,7 @@ import {
 import type { FeedSummary } from "../api/types";
 import { useCategories, useDeleteFeed, useFeedRead, useRefreshFeed, useUpdateFeed } from "../state/hooks";
 import { flattenCategories } from "../utils/categories";
+import { AVATAR_COLORS, avatarColorOverride, setAvatarColorOverride } from "../utils/avatarColor";
 import { formatError } from "./Feedback";
 
 function RenameDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolean; onClose: () => void }) {
@@ -25,12 +26,14 @@ function RenameDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolea
   const categories = flattenCategories(categoriesData?.categories ?? []);
   const [title, setTitle] = useState(feed.title);
   const [categoryId, setCategoryId] = useState(feed.category_id);
+  const [avatarColor, setAvatarColor] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (open) {
       setTitle(feed.title);
       setCategoryId(feed.category_id);
+      setAvatarColor(avatarColorOverride(feed.id));
       setError("");
     }
   }, [open, feed]);
@@ -43,6 +46,7 @@ function RenameDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolea
         title: title.trim() || undefined,
         category_id: categoryId || undefined,
       });
+      setAvatarColorOverride(feed.id, avatarColor);
       onClose();
     } catch (e) {
       setError(formatError(e));
@@ -78,6 +82,35 @@ function RenameDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolea
                   ))}
                 </select>
               </label>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-app-text-2">Avatar color</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {AVATAR_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setAvatarColor(color)}
+                      aria-label={`Avatar color ${color}`}
+                      className={`h-6 w-6 rounded-full transition-transform ${
+                        avatarColor === color ? "scale-110 ring-2 ring-app-text" : "ring-1 ring-black/10"
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setAvatarColor(null)}
+                    aria-label="Auto avatar color"
+                    className={`rounded-md border px-2 py-1 text-xs ${
+                      avatarColor === null
+                        ? "border-accent bg-accent-soft text-accent-soft-foreground"
+                        : "border-app-border-strong text-app-text-muted hover:text-app-text"
+                    }`}
+                  >
+                    Auto
+                  </button>
+                </div>
+              </div>
               {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             </Modal.Body>
             <Modal.Footer>

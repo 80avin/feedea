@@ -59,6 +59,9 @@
   :root[data-accent="zinc"] {
     --accent: oklch(0.442 0.017 285.79);
   }
+  :root.dark[data-accent="zinc"] {
+    --accent: oklch(0.705 0.015 286.067);
+  }
   :root[data-accent="emerald"] {
     --accent: oklch(0.596 0.145 163.225);
   }
@@ -67,6 +70,14 @@
   }
   :root {
     --accent-foreground: var(--snow);
+    --accent-soft: color-mix(in oklab, var(--accent) 12%, var(--app-surface));
+    --accent-soft-hover: color-mix(in oklab, var(--accent) 20%, var(--app-surface));
+    --accent-soft-foreground: color-mix(in oklab, var(--accent) 60%, var(--app-text));
+  }
+  :root.dark {
+    --accent-soft: color-mix(in oklab, var(--accent) 18%, var(--app-surface));
+    --accent-soft-hover: color-mix(in oklab, var(--accent) 28%, var(--app-surface));
+    --accent-soft-foreground: color-mix(in oklab, var(--accent) 55%, var(--app-text));
   }
 }
 
