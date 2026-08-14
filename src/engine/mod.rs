@@ -140,7 +140,7 @@ pub mod tests {
                             let _ = stream.flush();
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                            if last_request.elapsed() > std::time::Duration::from_secs(5) {
+                            if last_request.elapsed() > std::time::Duration::from_millis(500) {
                                 break;
                             }
                             thread::sleep(std::time::Duration::from_millis(5));
@@ -182,7 +182,13 @@ pub mod tests {
 "#;
 
     fn tmp_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("rssea-engine-test-{}", std::process::id()));
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "rssea-engine-test-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }
