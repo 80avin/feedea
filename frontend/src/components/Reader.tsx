@@ -74,7 +74,7 @@ export default function Reader() {
         <ReaderActions article={data} onSaveClick={() => setSaveOpen(true)} layout="bar" />
       </div>
 
-      <SaveDialog open={saveOpen} article={data} onClose={() => setSaveOpen(false)} />
+      <SaveDialog open={saveOpen} articleId={data.id} onClose={() => setSaveOpen(false)} />
     </div>
   );
 }

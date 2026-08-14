@@ -52,6 +52,8 @@ pub struct Headline {
     pub marked: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Debug)]

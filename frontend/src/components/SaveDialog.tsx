@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { Button, Chip, Input, Modal, TextArea, useOverlayState } from "@heroui/react";
-import type { ArticleDetail } from "../api/types";
-import { useSaveArticle, useTags, useUpdateNoteTags } from "../state/hooks";
+import { useArticle, useSaveArticle, useTags, useUpdateNoteTags } from "../state/hooks";
 import { formatError } from "./Feedback";
 
 interface SaveDialogProps {
   open: boolean;
-  article: ArticleDetail;
+  articleId: string;
   onClose: () => void;
 }
 
@@ -14,13 +13,14 @@ function parseTags(text: string): string[] {
   return [...new Set(text.split(",").map((t) => t.trim()).filter(Boolean))];
 }
 
-export default function SaveDialog({ open, article, onClose }: SaveDialogProps) {
+export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps) {
   const state = useOverlayState({
     isOpen: open,
     onOpenChange: (isOpen) => {
       if (!isOpen) onClose();
     },
   });
+  const { data: article } = useArticle(articleId);
   const [note, setNote] = useState("");
   const [tagsText, setTagsText] = useState("");
   const [error, setError] = useState("");
@@ -31,9 +31,9 @@ export default function SaveDialog({ open, article, onClose }: SaveDialogProps) 
   const pending = create.isPending || update.isPending;
 
   useEffect(() => {
-    if (open) {
+    if (open && article) {
       setNote(article.note ?? "");
-      setTagsText(article.tags.join(", "));
+      setTagsText((article.tags ?? []).join(", "));
       setError("");
     }
   }, [open, article]);
@@ -46,6 +46,7 @@ export default function SaveDialog({ open, article, onClose }: SaveDialogProps) 
   };
 
   const submit = async () => {
+    if (!article) return;
     const tags = parseTags(tagsText);
     const payload = { id: article.id, note: note.trim() || undefined, tags };
     try {
@@ -62,7 +63,7 @@ export default function SaveDialog({ open, article, onClose }: SaveDialogProps) 
         <Modal.Container>
           <Modal.Dialog>
             <Modal.Header>
-              <Modal.Heading>{article.marked ? "Edit note & tags" : "Save article"}</Modal.Heading>
+              <Modal.Heading>{article?.marked ? "Edit note & tags" : "Save article"}</Modal.Heading>
             </Modal.Header>
             <Modal.Body>
               <label className="flex flex-col gap-1.5">
@@ -101,7 +102,7 @@ export default function SaveDialog({ open, article, onClose }: SaveDialogProps) 
                 Cancel
               </Button>
               <Button variant="primary" size="sm" onPress={submit} isDisabled={pending}>
-                {pending ? "Saving…" : article.marked ? "Update" : "Save"}
+                {pending ? "Saving…" : article?.marked ? "Update" : "Save"}
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

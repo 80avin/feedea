@@ -60,8 +60,9 @@ pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams
     {
         let app_db = state.app_db.lock().await;
         for item in &mut items {
-            let (note, _tags) = app_db.note_and_tags(&item.id)?;
+            let (note, tags) = app_db.note_and_tags(&item.id)?;
             item.note = note;
+            item.tags = Some(tags);
         }
     }
     let mut months: Vec<MonthGroup> = Vec::new();

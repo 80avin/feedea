@@ -35,6 +35,7 @@ export interface Headline {
   unread: boolean;
   marked: boolean;
   note?: string;
+  tags?: string[];
 }
 
 export interface CategoryCard {

@@ -401,6 +401,7 @@ impl Engine {
                 unread: a.unread == Read::Unread,
                 marked: a.marked == Marked::Marked,
                 note: None,
+                tags: None,
             });
         }
         Ok(out)
