@@ -10,4 +10,5 @@ export const queryKeys = {
   settings: ["settings"] as const,
   categories: ["categories"] as const,
   tags: ["tags"] as const,
+  suggestions: (q: string) => ["suggestions", q] as const,
 };

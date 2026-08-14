@@ -122,6 +122,10 @@ export interface TagsResponse {
   tags: string[];
 }
 
+export interface SuggestionsResponse {
+  suggestions: Headline[];
+}
+
 export interface ArticleQueryParams {
   feed?: string;
   category?: string;

@@ -10,6 +10,7 @@ import type {
   SavedResponse,
   Settings,
   SourcesResponse,
+  SuggestionsResponse,
   TagsResponse,
 } from "../api/types";
 import { queryKeys } from "./keys";
@@ -54,12 +55,34 @@ export function useTags() {
   return useQuery({ queryKey: queryKeys.tags, queryFn: () => api.get<TagsResponse>("/api/tags") });
 }
 
+export function useSuggestions(q: string): { suggestions: Headline[]; isFetching: boolean } {
+  const trimmed = q.trim();
+  const { data, isFetching } = useQuery({
+    queryKey: queryKeys.suggestions(trimmed),
+    queryFn: () => api.get<SuggestionsResponse>(`/api/search/suggestions?q=${encodeURIComponent(trimmed)}`),
+    enabled: trimmed.length > 0,
+  });
+  return { suggestions: data?.suggestions ?? [], isFetching };
+}
+
 export function useSettings() {
   return useQuery({ queryKey: queryKeys.settings, queryFn: () => api.get<Settings>("/api/settings") });
 }
 
-export function useArticles(params: ArticleQueryParams) {
-  return useInfiniteQuery({
+interface ArticlesQueryResult {
+  data: { pages: Headline[][] } | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  refetch: () => void;
+  fetchNextPage: () => void;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+}
+
+export function useArticles(params: ArticleQueryParams): ArticlesQueryResult {
+  const hasSearch = !!(params.search && params.search.trim().length > 0);
+  const infinite = useInfiniteQuery({
     queryKey: queryKeys.articles(params),
     queryFn: ({ pageParam }) => api.get<Headline[]>(articlesPath(params, pageParam as number, PAGE_SIZE)),
     initialPageParam: 0,
@@ -69,7 +92,35 @@ export function useArticles(params: ArticleQueryParams) {
       }
       return allPages.reduce((total, page) => total + page.length, 0);
     },
+    enabled: !hasSearch,
   });
+  const search = useQuery({
+    queryKey: queryKeys.articles(params),
+    queryFn: () => api.get<Headline[]>(articlesPath(params, 0, PAGE_SIZE)),
+    enabled: hasSearch,
+  });
+  if (hasSearch) {
+    return {
+      data: search.data ? { pages: [search.data] } : undefined,
+      isLoading: search.isLoading,
+      isError: search.isError,
+      error: search.error,
+      refetch: search.refetch,
+      fetchNextPage: () => {},
+      hasNextPage: false,
+      isFetchingNextPage: false,
+    };
+  }
+  return {
+    data: infinite.data,
+    isLoading: infinite.isLoading,
+    isError: infinite.isError,
+    error: infinite.error,
+    refetch: infinite.refetch,
+    fetchNextPage: infinite.fetchNextPage,
+    hasNextPage: infinite.hasNextPage,
+    isFetchingNextPage: infinite.isFetchingNextPage,
+  };
 }
 
 export function useSaved(params: { offset?: number; limit?: number } = {}) {

@@ -1,20 +1,60 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import type { Headline } from "../api/types";
-import ArticleListItem from "./ArticleListItem";
+import { formatAge } from "../utils/format";
+import FeedAvatar from "./FeedAvatar";
 
-export default function TimelinePanel({ articles }: { articles: Headline[] }) {
+function TimelineItem({ item }: { item: Headline }) {
+  const [thumbFailed, setThumbFailed] = useState(false);
+
+  return (
+    <Link to={`/feeds/${encodeURIComponent(item.id)}`} className="block px-4 py-2 hover:bg-zinc-900/60">
+      <div className="flex items-start gap-3">
+        <FeedAvatar feedId={item.feed_id} title={item.feed_title} className="h-8 w-8" />
+        <div className="min-w-0 flex-1">
+          {item.title && (
+            <p className={`truncate text-sm ${item.unread ? "font-semibold text-zinc-100" : "text-zinc-300"}`}>
+              {item.title}
+            </p>
+          )}
+          <p className="truncate text-xs text-zinc-500">
+            {item.date ? formatAge(item.date) : ""}
+            {item.date && item.feed_title ? " · " : ""}
+            {item.feed_title}
+          </p>
+        </div>
+        {item.thumbnail_url && !thumbFailed && (
+          <img
+            src={`/api/thumbnail/${encodeURIComponent(item.id)}`}
+            alt=""
+            loading="lazy"
+            onError={() => setThumbFailed(true)}
+            className="h-12 w-16 shrink-0 rounded-md object-cover"
+          />
+        )}
+      </div>
+    </Link>
+  );
+}
+
+export default function TimelinePanel({
+  articles,
+  bottomRef,
+}: {
+  articles: Headline[];
+  bottomRef?: (node: Element | null) => void;
+}) {
   return (
     <div className="flex h-full flex-col">
-      <ul className="divide-y divide-zinc-800/60 px-4">
+      <ul className="divide-y divide-zinc-800/60">
         {articles.map((item) => (
           <li key={item.id}>
-            <Link to={`/feeds/${item.id}`} className="block">
-              <ArticleListItem item={item} />
-            </Link>
+            <TimelineItem item={item} />
           </li>
         ))}
         {articles.length === 0 && <li className="py-8 text-center text-sm text-zinc-600">No articles.</li>}
       </ul>
+      <div ref={bottomRef} className="h-px" />
     </div>
   );
 }
