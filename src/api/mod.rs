@@ -1,5 +1,8 @@
 pub mod health;
 
-pub fn router() -> axum::Router {
-    axum::Router::new()
+use crate::config::Config;
+use axum::routing::get;
+
+pub fn router(_config: Config) -> axum::Router {
+    axum::Router::new().route("/api/health", get(health::health))
 }
