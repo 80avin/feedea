@@ -177,6 +177,23 @@ impl Engine {
             plain_text: a.plain_text,
         })
     }
+    pub async fn get_favicon(&self, feed_id: &str) -> anyhow::Result<Option<(String, Vec<u8>)>> {
+        let feed_id = FeedID::new(feed_id);
+        let icon = self.with_nf(move |nf| nf.load_icon_from_db(&feed_id)).await?;
+        let data = icon.highres.or(icon.lowres);
+        Ok(data.map(|bytes| (icon.format.unwrap_or_else(|| "image/x-icon".to_string()), bytes)))
+    }
+
+    pub async fn get_article_thumbnail(&self, article_id: &str) -> anyhow::Result<Option<(String, Vec<u8>)>> {
+        let article_id = news_flash::models::ArticleID::new(article_id);
+        match self.nf.get_article_thumbnail(&article_id, &self.client).await? {
+            Some(thumbnail) => {
+                let format = thumbnail.format.unwrap_or_else(|| "image/jpeg".to_string());
+                Ok(thumbnail.data.map(|d| (format, d)))
+            }
+            None => Ok(None),
+        }
+    }
 }
 
 #[cfg(test)]

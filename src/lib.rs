@@ -7,16 +7,22 @@ pub mod engine;
 
 use config::Config;
 
+#[derive(Clone)]
+pub struct AppState {
+    pub engine: engine::Engine,
+}
+
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
 pub async fn run(config: Config) -> anyhow::Result<()> {
     config.ensure_data_dir()?;
+    let engine = engine::Engine::new(&config).await?;
+    let state = AppState { engine };
     let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port)).await?;
     tracing::info!("rssea {} listening on {}", crate::version(), listener.local_addr()?);
-    let app = api::router(config);
-    axum::serve(listener, app).await?;
+    axum::serve(listener, api::router(state)).await?;
     Ok(())
 }
 
