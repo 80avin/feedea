@@ -63,6 +63,7 @@ pub async fn detail(State(state): State<AppState>, Path(id): Path<String>) -> Ap
             let (note, tags) = state.app_db.lock().await.note_and_tags(&id)?;
             article.note = note;
             article.tags = tags;
+            state.engine.render_article_content(&mut article).await?;
             Ok(Json(article))
         }
         Err(error) if crate::engine::is_not_found(&error) => Err(ApiError::not_found("article not found")),

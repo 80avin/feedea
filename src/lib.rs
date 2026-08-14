@@ -4,6 +4,7 @@ pub mod auth;
 pub mod config;
 pub mod dto;
 pub mod engine;
+pub mod proxy;
 
 use config::Config;
 

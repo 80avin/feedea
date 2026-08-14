@@ -63,6 +63,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/login", post(auth::login))
         .route("/api/logout", post(auth::logout))
         .route("/api/session", get(auth::session))
+        .route("/img", get(crate::proxy::proxy_image))
         .merge(protected)
         .with_state(state)
 }

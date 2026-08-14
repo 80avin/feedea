@@ -15,6 +15,7 @@ pub struct Discovered {
 use crate::config::Config;
 use crate::dto::{ArticleDetail, FeedSummary, Headline};
 
+pub mod content;
 pub mod queries;
 pub mod sync;
 
@@ -442,6 +443,13 @@ impl Engine {
             tags: Vec::new(),
         })
     }
+    pub async fn render_article_content(&self, article: &mut crate::dto::ArticleDetail) -> anyhow::Result<()> {
+        if let (Some(html), Some(base)) = (&article.html, &article.url) {
+            article.html = Some(crate::engine::content::rewrite_html(html, base));
+        }
+        Ok(())
+    }
+
     pub async fn get_favicon(&self, feed_id: &str) -> anyhow::Result<Option<(String, Vec<u8>)>> {
         let feed_id = FeedID::new(feed_id);
         let icon = self.with_nf(move |nf| nf.load_icon_from_db(&feed_id)).await?;
