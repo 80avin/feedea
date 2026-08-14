@@ -59,6 +59,7 @@ mod tests {
         db.set_setting("theme", "dark").unwrap();
         assert_eq!(db.get_setting("theme").unwrap(), Some("dark".to_string()));
         assert_eq!(db.get_setting("missing").unwrap(), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -76,5 +77,6 @@ mod tests {
         for t in ["saved", "saved_tags", "tags", "sessions", "settings"] {
             assert!(tables.contains(&t.to_string()), "missing table {t}: {tables:?}");
         }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

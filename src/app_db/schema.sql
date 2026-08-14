@@ -1,5 +1,3 @@
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS saved (
     article_id TEXT PRIMARY KEY NOT NULL,
     saved_at TEXT NOT NULL,
