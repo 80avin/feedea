@@ -44,11 +44,14 @@ mod tests {
         let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
         let engine = Engine::new(&config).await.unwrap();
         engine.add_feed(&server.url, Some("Sched Feed".into()), None).await.unwrap();
+        let before = engine.last_sync().await;
 
         let handle = tokio::spawn(scheduler_loop(engine.clone(), std::time::Duration::from_millis(50)));
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         handle.abort();
 
+        let after = engine.last_sync().await;
+        assert!(after > before);
         let unread = engine
             .with_nf(|nf| nf.unread_count_all())
             .await

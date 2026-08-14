@@ -59,6 +59,11 @@ impl Engine {
         self.mutation_lock.lock().await
     }
 
+    #[cfg(test)]
+    pub async fn last_sync(&self) -> chrono::DateTime<chrono::Utc> {
+        self.nf.last_sync().await
+    }
+
     pub async fn add_feed(
         &self,
         url: &str,
