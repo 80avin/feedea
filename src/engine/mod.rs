@@ -9,6 +9,7 @@ use news_flash::NewsFlash;
 use crate::config::Config;
 use crate::dto::{ArticleDetail, FeedSummary, Headline};
 
+pub mod queries;
 pub mod sync;
 
 #[derive(Clone)]
