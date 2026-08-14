@@ -4,6 +4,7 @@ pub mod error;
 pub mod feeds;
 pub mod health;
 pub mod overview;
+pub mod search;
 pub mod sources;
 
 use axum::extract::State;
@@ -32,6 +33,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/feeds", get(feeds::list))
         .route("/api/overview", get(overview::overview))
         .route("/api/articles", get(articles::list))
+        .route("/api/search/suggestions", get(search::suggestions))
         .route("/api/articles/{id}", get(articles::detail))
         .route("/api/favicon/{feed_id}", get(articles::favicon))
         .route("/api/thumbnail/{article_id}", get(articles::thumbnail))

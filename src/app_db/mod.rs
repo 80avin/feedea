@@ -59,6 +59,16 @@ impl AppDb {
     pub fn set_password_hash(&mut self, hash: &str) -> anyhow::Result<()> {
         self.set_setting("password_hash", hash)
     }
+
+    pub fn article_ids_for_tag(&self, tag: &str) -> anyhow::Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT article_id FROM saved_tags WHERE tag = ?1")?;
+        let mut rows = stmt.query(rusqlite::params![tag])?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            out.push(row.get(0)?);
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]

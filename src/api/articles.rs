@@ -7,21 +7,30 @@ use serde::Deserialize;
 use crate::api::error::{ApiError, ApiResult};
 use crate::dto::{ArticleDetail, Headline};
 use crate::AppState;
-use news_flash::models::{ArticleFilter, ArticleOrder, CategoryID, FeedID, OrderBy};
+use news_flash::models::{ArticleFilter, ArticleOrder, CategoryID, FeedID, Marked, OrderBy};
 
 #[derive(Deserialize)]
 pub struct ListParams {
     pub feed: Option<String>,
     pub category: Option<String>,
+    pub saved: Option<String>,
+    pub tag: Option<String>,
+    pub search: Option<String>,
     pub offset: Option<i64>,
     pub limit: Option<i64>,
 }
 
 pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams>) -> ApiResult<Json<Vec<Headline>>> {
+    let limit = params.limit.unwrap_or(30).clamp(1, 200);
+    if let Some(q) = params.search
+        && !q.trim().is_empty()
+    {
+        return Ok(Json(state.engine.search(&q, limit).await?));
+    }
     let mut filter = ArticleFilter {
         order: Some(ArticleOrder::NewestFirst),
         order_by: Some(OrderBy::Published),
-        limit: Some(params.limit.unwrap_or(30).clamp(1, 200)),
+        limit: Some(limit),
         offset: Some(params.offset.unwrap_or(0).max(0)),
         ..ArticleFilter::default()
     };
@@ -30,6 +39,20 @@ pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams
     }
     if let Some(category) = params.category {
         filter.categories = Some(vec![CategoryID::new(&category)]);
+    }
+    if let Some(saved) = params.saved {
+        filter.marked = Some(match saved.as_str() {
+            "true" | "1" => Marked::Marked,
+            "false" | "0" => Marked::Unmarked,
+            _ => return Err(ApiError::bad_request("saved must be true/false or 1/0")),
+        });
+    }
+    if let Some(tag) = params.tag {
+        let ids = state.app_db.lock().await.article_ids_for_tag(&tag)?;
+        if ids.is_empty() {
+            return Ok(Json(Vec::new()));
+        }
+        filter.ids = Some(ids.into_iter().map(|id| news_flash::models::ArticleID::new(&id)).collect());
     }
     Ok(Json(state.engine.get_headlines(filter).await?))
 }

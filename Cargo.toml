@@ -25,3 +25,4 @@ sha2 = "0.11.0"
 [dev-dependencies]
 tower = "0.5"
 http-body-util = "0.1"
+rusqlite = { version = "0.40.2", features = ["bundled", "chrono"] }

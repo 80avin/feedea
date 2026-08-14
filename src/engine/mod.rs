@@ -184,6 +184,31 @@ impl Engine {
         Ok(out)
     }
 
+    pub async fn get_headlines_by_ids(&self, ids: Vec<String>) -> anyhow::Result<Vec<Headline>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = ids.into_iter().map(|id| news_flash::models::ArticleID::new(&id)).collect::<Vec<_>>();
+        let filter = news_flash::models::ArticleFilter {
+            order: Some(news_flash::models::ArticleOrder::NewestFirst),
+            order_by: Some(news_flash::models::OrderBy::Published),
+            ids: Some(ids),
+            ..news_flash::models::ArticleFilter::default()
+        };
+        self.get_headlines(filter).await
+    }
+
+    pub async fn search(&self, q: &str, limit: i64) -> anyhow::Result<Vec<Headline>> {
+        let db_path = self.data_dir().join("engine/data/database.sqlite");
+        let hits = crate::engine::queries::search(&db_path, q, limit)?;
+        let ids = hits.into_iter().map(|h| h.article_id).collect();
+        self.get_headlines_by_ids(ids).await
+    }
+
+    pub async fn search_suggestions(&self, q: &str) -> anyhow::Result<Vec<Headline>> {
+        self.search(q, 8).await
+    }
+
     pub async fn get_article_detail(&self, article_id: &str) -> anyhow::Result<ArticleDetail> {
         let id = news_flash::models::ArticleID::new(article_id);
         let a = self.with_nf(move |nf| nf.get_fat_article(&id)).await?;
