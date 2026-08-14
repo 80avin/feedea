@@ -3,8 +3,14 @@ use std::sync::Arc;
 
 use news_flash::error::{DatabaseError, NewsFlashError};
 use news_flash::feed_api::FeedHeaderMap;
-use news_flash::models::{ArticleFilter, CategoryID, FeedID, Marked, PluginID, Read, Url};
+use news_flash::models::{ArticleFilter, CategoryID, FeedID, FeedMapping, Marked, PluginID, Read, Url};
 use news_flash::NewsFlash;
+
+pub struct Discovered {
+    pub title: Option<String>,
+    pub feed_url: Option<String>,
+    pub alternatives: Vec<(String, String)>,
+}
 
 use crate::config::Config;
 use crate::dto::{ArticleDetail, FeedSummary, Headline};
@@ -109,6 +115,85 @@ impl Engine {
         let _guard = self.mutation_guard().await;
         let feed_id = FeedID::new(feed_id);
         Ok(self.nf.fetch_feed(&feed_id, &self.client, reqwest::header::HeaderMap::new()).await?)
+    }
+
+    pub async fn discover(&self, url: &str) -> anyhow::Result<Discovered> {
+        let url = news_flash::models::Url::parse(url)?;
+        let id = news_flash::models::FeedID::new(url.as_str());
+        let semaphore = self.nf.get_semaphore();
+        let parsed = news_flash::feed_parser::download_and_parse_feed(&url, &id, None, semaphore, &self.client).await;
+        match parsed {
+            Ok(news_flash::feed_parser::ParsedUrl::SingleFeed(feed)) => {
+                Ok(Discovered {
+                    title: Some(feed.label),
+                    feed_url: feed.feed_url.map(|u| u.to_string()),
+                    alternatives: Vec::new(),
+                })
+            }
+            Ok(news_flash::feed_parser::ParsedUrl::MultipleFeeds(feeds)) => {
+                let first = feeds.first();
+                Ok(Discovered {
+                    title: first.map(|f| f.label.clone()),
+                    feed_url: first.and_then(|f| f.feed_url.clone()).map(|u| u.to_string()),
+                    alternatives: feeds.into_iter().map(|f| (f.label, f.feed_url.map(|u| u.to_string()).unwrap_or_default())).collect(),
+                })
+            }
+            Err(_) => Ok(Discovered { title: None, feed_url: None, alternatives: Vec::new() }),
+        }
+    }
+
+    pub async fn rename_feed(&self, id: &str, title: &str) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        self.nf.rename_feed(&FeedID::new(id), title, &self.client).await?;
+        Ok(())
+    }
+
+    pub async fn move_feed(&self, id: &str, to_category: &str) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        let (_, mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
+        let from = mappings
+            .into_iter()
+            .find(|m| m.feed_id.as_str() == id)
+            .ok_or_else(|| anyhow::anyhow!("feed not found"))?;
+        let to = FeedMapping {
+            feed_id: from.feed_id.clone(),
+            category_id: news_flash::models::CategoryID::new(to_category),
+            sort_index: from.sort_index,
+        };
+        self.nf.move_feed(&from, &to, &self.client).await?;
+        Ok(())
+    }
+
+    pub async fn remove_feed(&self, id: &str) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        self.nf.remove_feed(&FeedID::new(id), &self.client).await?;
+        Ok(())
+    }
+
+    pub async fn mark_feed_read(&self, id: &str) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        self.nf.set_feed_read(&[FeedID::new(id)], &self.client).await?;
+        Ok(())
+    }
+
+    pub async fn import_opml(&self, opml: &str) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        self.nf.import_opml(opml, true, &self.client).await?;
+        Ok(())
+    }
+
+    pub async fn export_opml(&self) -> anyhow::Result<String> {
+        self.nf.export_opml().await.map_err(anyhow::Error::from)
+    }
+
+    pub async fn feed_article_ids(&self, feed_id: &str) -> anyhow::Result<Vec<String>> {
+        let id = FeedID::new(feed_id);
+        let filter = ArticleFilter {
+            feeds: Some(vec![id]),
+            ..ArticleFilter::default()
+        };
+        let ids = self.with_nf(move |nf| nf.get_article_ids(filter)).await?;
+        Ok(ids.into_iter().map(|a| a.as_str().to_string()).collect())
     }
 
     pub async fn get_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {

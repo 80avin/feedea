@@ -45,7 +45,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/categories/{id}/read", post(categories::mark_read))
         .route("/api/favicon/{feed_id}", get(articles::favicon))
         .route("/api/thumbnail/{article_id}", get(articles::thumbnail))
-        .route("/api/sources", post(sources::add))
+        .route("/api/sources", get(sources::list).post(sources::add))
+        .route("/api/sources/discover", post(sources::discover))
+        .route("/api/sources/import-opml", post(sources::import_opml))
+        .route("/api/sources/export-opml", get(sources::export_opml))
+        .route("/api/sources/{id}", patch(sources::update).delete(sources::remove))
+        .route("/api/sources/{id}/read", post(sources::mark_read))
         .route("/api/sources/{id}/refresh", post(sources::refresh))
         .route("/api/sources/refresh-all", post(sources::refresh_all))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_auth));
