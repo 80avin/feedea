@@ -16,6 +16,7 @@ url = "2.5.8"
 reqwest = "0.13.4"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+chrono = "0.4"
 
 [dev-dependencies]
 tower = "0.5"
