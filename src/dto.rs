@@ -14,6 +14,15 @@ pub struct FeedSummary {
 }
 
 #[derive(Serialize, Debug, Clone)]
+pub struct CategoryCard {
+    pub category_id: String,
+    pub name: String,
+    pub total_count: i64,
+    pub unread_count: i64,
+    pub items: Vec<Headline>,
+}
+
+#[derive(Serialize, Debug, Clone)]
 pub struct Headline {
     pub id: String,
     pub title: Option<String>,

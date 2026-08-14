@@ -3,6 +3,7 @@ pub mod auth;
 pub mod error;
 pub mod feeds;
 pub mod health;
+pub mod overview;
 pub mod sources;
 
 use axum::extract::State;
@@ -29,6 +30,7 @@ pub async fn require_auth(
 pub fn router(state: AppState) -> Router {
     let protected = Router::new()
         .route("/api/feeds", get(feeds::list))
+        .route("/api/overview", get(overview::overview))
         .route("/api/articles", get(articles::list))
         .route("/api/articles/{id}", get(articles::detail))
         .route("/api/favicon/{feed_id}", get(articles::favicon))

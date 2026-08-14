@@ -17,6 +17,7 @@ pub struct Engine {
     nf: Arc<NewsFlash>,
     client: reqwest::Client,
     mutation_lock: Arc<tokio::sync::Mutex<()>>,
+    data_dir: std::path::PathBuf,
 }
 
 impl Engine {
@@ -38,7 +39,12 @@ impl Engine {
             nf: Arc::new(nf),
             client: reqwest::Client::new(),
             mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
+            data_dir: config.data_dir.clone(),
         })
+    }
+
+    pub fn data_dir(&self) -> &std::path::Path {
+        &self.data_dir
     }
 
     pub async fn with_nf<T, F>(&self, f: F) -> anyhow::Result<T>
@@ -126,6 +132,27 @@ impl Engine {
                 error_count: feed.error_count,
                 error_message: feed.error_message,
             });
+        }
+        Ok(out)
+    }
+
+    pub async fn get_categories(
+        &self,
+    ) -> anyhow::Result<(
+        Vec<news_flash::models::Category>,
+        Vec<news_flash::models::CategoryMapping>,
+    )> {
+        self.with_nf(|nf| nf.get_categories()).await
+    }
+
+    pub async fn category_unread_map(&self) -> anyhow::Result<std::collections::HashMap<String, i64>> {
+        let unread = self.with_nf(|nf| nf.unread_count_feed_map(false)).await?;
+        let (_, mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
+        let mut out: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+        for m in mappings {
+            let cat = m.category_id.as_str().to_string();
+            let count = unread.get(&m.feed_id).copied().unwrap_or(0);
+            *out.entry(cat).or_insert(0) += count;
         }
         Ok(out)
     }
