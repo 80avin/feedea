@@ -149,6 +149,7 @@ export function useSaveArticle() {
       queryClient.invalidateQueries({ queryKey: ["saved"] });
       queryClient.invalidateQueries({ queryKey: ["overview"] });
       queryClient.invalidateQueries({ queryKey: ["article", id] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
     },
   });
 }
