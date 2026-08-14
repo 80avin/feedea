@@ -4,6 +4,7 @@ import type {
   ArticleDetail,
   ArticleQueryParams,
   CategoriesResponse,
+  DiscoverResponse,
   FeedSummary,
   Headline,
   OverviewResponse,
@@ -338,6 +339,34 @@ export function useExportOpml() {
 
 export function useDiscover() {
   return useMutation({
-    mutationFn: ({ url }: { url: string }) => api.post("/api/sources/discover", { url }),
+    mutationFn: ({ url }: { url: string }) => api.post<DiscoverResponse>("/api/sources/discover", { url }),
+  });
+}
+
+export function useFeedRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => api.post(`/api/sources/${encodeId(id)}/read`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeds"] });
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+      queryClient.invalidateQueries({ queryKey: ["articles"] });
+      queryClient.invalidateQueries({ queryKey: ["overview"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+  });
+}
+
+export function useUpdateFeed() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, title, category_id }: { id: string; title?: string; category_id?: string }) =>
+      api.patch<FeedSummary>(`/api/sources/${encodeId(id)}`, { title, category_id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feeds"] });
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+      queryClient.invalidateQueries({ queryKey: ["overview"] });
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
   });
 }

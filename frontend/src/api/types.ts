@@ -108,6 +108,17 @@ export interface SourcesResponse {
   groups: SourceGroup[];
 }
 
+export interface DiscoverAlternative {
+  label: string;
+  url: string;
+}
+
+export interface DiscoverResponse {
+  title: string | null;
+  feed_url: string | null;
+  alternatives: DiscoverAlternative[];
+}
+
 export interface MonthGroup {
   month: string;
   items: Headline[];

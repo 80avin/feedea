@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Link, NavLink, useLocation } from "react-router";
+import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { Button, Separator } from "@heroui/react";
 import {
   BookmarkIcon,
@@ -95,11 +95,17 @@ function FeedLink({ id, title, unreadCount }: { id: string; title: string; unrea
 }
 
 export default function Sidebar() {
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
+  const navigate = useNavigate();
   const { logout } = useSession();
   const { data: categoriesData } = useCategories();
   const { data: sourcesData } = useSources();
   const feedsActive = pathname.startsWith("/feeds");
+
+  const openSources = () => {
+    navigate("/sources", { state: { backgroundLocation: location } });
+  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -109,6 +115,14 @@ export default function Sidebar() {
         <NavItem to="/" label="Overview" icon={Squares2X2Icon} end />
         <NavItem to="/feeds" label="Feeds" icon={RssIcon} />
         <NavItem to="/saved" label="Saved" icon={BookmarkIcon} />
+        <button
+          type="button"
+          onClick={openSources}
+          className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 transition-colors hover:bg-zinc-800/60 hover:text-zinc-100"
+        >
+          <ServerStackIcon className="h-4 w-4 shrink-0" />
+          Sources
+        </button>
       </nav>
 
       {feedsActive && (
