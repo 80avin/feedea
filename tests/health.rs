@@ -2,17 +2,22 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use rssea::config::Config;
+use rssea::engine::Engine;
+use rssea::AppState;
 use std::path::PathBuf;
 use tower::ServiceExt;
 
 #[tokio::test]
 async fn health_returns_ok_with_version() {
+    let dir = PathBuf::from(format!("/tmp/rssea-health-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
     let cfg = Config {
-        data_dir: PathBuf::from("/tmp/rssea-health-test"),
+        data_dir: dir,
         host: "127.0.0.1".into(),
         port: 3000,
     };
-    let app = rssea::api::router(cfg);
+    let engine = Engine::new(&cfg).await.unwrap();
+    let app = rssea::api::router(AppState { engine });
     let response = app
         .oneshot(
             Request::builder()
