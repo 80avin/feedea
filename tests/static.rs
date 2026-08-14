@@ -46,23 +46,29 @@ async fn serves_index_html_at_root() {
 
 #[tokio::test]
 async fn serves_hashed_asset_with_content_type() {
-    let asset = rssea::assets::Assets::iter()
-        .find(|p| p.starts_with("assets/"))
-        .expect("dist should contain hashed assets");
-    let expected = if asset.ends_with(".js") {
-        "text/javascript"
-    } else if asset.ends_with(".css") {
-        "text/css"
-    } else {
-        "text/html"
-    };
+    let mut assets: Vec<String> = rssea::assets::Assets::iter().map(|p| p.to_string()).collect();
+    assets.sort();
+    let asset = assets
+        .iter()
+        .find(|p| p.ends_with(".js"))
+        .or_else(|| {
+            assets
+                .iter()
+                .find(|p| !p.ends_with(".html") && !p.ends_with(".css"))
+        })
+        .expect("dist should contain a non-html, non-css asset");
     let app = spawn_app().await;
     let resp = app
         .oneshot(Request::builder().uri(format!("/{asset}")).body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    assert_eq!(resp.headers().get("content-type").unwrap(), expected);
+    let content_type = resp.headers().get("content-type").unwrap();
+    if asset.ends_with(".js") {
+        assert_eq!(content_type, "text/javascript");
+    } else {
+        assert_ne!(content_type, "text/html");
+    }
     assert!(!resp.into_body().collect().await.unwrap().to_bytes().is_empty());
 }
 

@@ -15,7 +15,7 @@ fn index_html() -> Response {
 
 pub async fn fallback(uri: Uri) -> Response {
     let path = uri.path();
-    if path.starts_with("/api/") || path.starts_with("/img") {
+    if path.starts_with("/api") || path.starts_with("/img") {
         return StatusCode::NOT_FOUND.into_response();
     }
     let trimmed = path.trim_start_matches('/');

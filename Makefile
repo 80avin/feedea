@@ -1,4 +1,4 @@
-.PHONY: dev build run test clean frontend-dev backend-dev install-watch
+.PHONY: dev build run test clean frontend-dev backend-dev
 
 DATA_DIR ?= $(HOME)/.local/share/rssea
 BACKEND_PORT ?= 3000
@@ -21,12 +21,10 @@ run:
 	cargo run --release -- --data-dir $(DATA_DIR)
 
 test:
+	cd frontend && bun run build && cd ..
 	cargo test
 	@if [ -f frontend/package.json ]; then cd frontend && bun run typecheck && bun run lint; else echo "frontend not present; skipping frontend checks"; fi
 
 clean:
 	cargo clean
 	rm -rf frontend/dist frontend/node_modules
-
-install-watch:
-	cargo install cargo-watch

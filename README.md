@@ -77,7 +77,6 @@ make test     # cargo test + frontend typecheck/lint
 | `make dev`       | backend + Vite concurrently                        |
 | `make test`      | cargo tests + frontend typecheck/lint              |
 | `make clean`     | remove `target/`, `frontend/dist`, `frontend/node_modules` |
-| `make install-watch` | install `cargo-watch` for backend auto-reload  |
 
 ## Configuration
 

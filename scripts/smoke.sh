@@ -84,6 +84,12 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
+if ! curl -sf -o /dev/null "$BASE/api/health"; then
+  echo "FAIL: timed out waiting for $BASE/api/health after 60s"
+  cat "$TMP/server.log" 2>/dev/null || true
+  exit 1
+fi
+
 check() {
   local desc="$1" expected="$2" method="$3" path="$4"
   shift 4

@@ -134,7 +134,8 @@ The schema is additive; no data migration step is required.
 
 - **`frontend/dist is missing` at compile time**: run `make build`, which
   builds the frontend before `cargo build`. (`frontend/dist` is git-ignored
-  on purpose.)
+  on purpose.) `make test` builds the frontend itself first, so it works from
+  a fresh checkout.
 - **No initial password printed**: make sure the data dir is empty (or the
   `password_hash` setting is absent). Check `journalctl -u rssea` for the
   line `rssea initial password: ...`.
