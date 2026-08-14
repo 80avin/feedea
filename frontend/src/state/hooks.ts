@@ -73,7 +73,11 @@ export function useArticles(params: ArticleQueryParams) {
 }
 
 export function useSaved(params: { offset?: number; limit?: number } = {}) {
-  return useQuery({ queryKey: queryKeys.saved(params), queryFn: () => api.get<SavedResponse>("/api/saved") });
+  const query = serializeParams({
+    offset: params.offset !== undefined ? String(params.offset) : undefined,
+    limit: params.limit !== undefined ? String(params.limit) : undefined,
+  });
+  return useQuery({ queryKey: queryKeys.saved(params), queryFn: () => api.get<SavedResponse>(`/api/saved${query}`) });
 }
 
 export function useArticle(id: string) {
@@ -120,6 +124,8 @@ export function useMarkRead() {
       queryClient.invalidateQueries({ queryKey: ["articles"] });
       queryClient.invalidateQueries({ queryKey: ["overview"] });
       queryClient.invalidateQueries({ queryKey: ["article", id] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
     },
   });
 }
@@ -131,6 +137,8 @@ export function useMarkAllRead() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["articles"] });
       queryClient.invalidateQueries({ queryKey: ["overview"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
     },
   });
 }
@@ -191,7 +199,7 @@ export function useDeleteCategory() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, remove_children }: { id: string; remove_children?: boolean }) =>
-      api.delete(`/api/categories/${id}`, remove_children ? { remove_children: true } : undefined),
+      api.delete(`/api/categories/${id}`, { remove_children: remove_children ?? false }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       queryClient.invalidateQueries({ queryKey: ["overview"] });

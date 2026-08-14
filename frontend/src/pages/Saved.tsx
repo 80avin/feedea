@@ -31,7 +31,9 @@ export default function Saved() {
               <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">{monthLabel(group.month)}</h3>
               <ul className="divide-y divide-zinc-800/60">
                 {group.items.map((item) => (
-                  <ArticleListItem key={item.id} item={item} hideFeed />
+                  <li key={item.id}>
+                    <ArticleListItem item={item} hideFeed />
+                  </li>
                 ))}
               </ul>
             </section>

@@ -25,6 +25,9 @@ export default function Settings() {
   const [syncInterval, setSyncInterval] = useState("30");
   const [keepDays, setKeepDays] = useState("");
   const [savedBanner, setSavedBanner] = useState("");
+  const [dirty, setDirty] = useState(false);
+
+  const markDirty = () => setDirty(true);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -32,12 +35,12 @@ export default function Settings() {
   const [passwordBanner, setPasswordBanner] = useState("");
 
   useEffect(() => {
-    if (data) {
+    if (data && !dirty) {
       setTheme(data.theme ?? "light");
       setSyncInterval(String(data.sync_interval_minutes));
       setKeepDays(data.keep_articles_days === null ? "" : String(data.keep_articles_days));
     }
-  }, [data]);
+  }, [data, dirty]);
 
   const savePreferences = async () => {
     const patch: { theme?: string; sync_interval_minutes?: number; keep_articles_days?: number | null } = {};
@@ -62,6 +65,7 @@ export default function Settings() {
     }
     try {
       await updateSettings.mutateAsync(patch);
+      setDirty(false);
       setSavedBanner("Settings saved.");
     } catch (e) {
       setSavedBanner(formatError(e));
@@ -105,7 +109,10 @@ export default function Settings() {
             <Field label="Theme">
               <select
                 value={theme}
-                onChange={(e) => setTheme(e.target.value)}
+                onChange={(e) => {
+                  setTheme(e.target.value);
+                  markDirty();
+                }}
                 className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
               >
                 <option value="light">Light</option>
@@ -118,7 +125,10 @@ export default function Settings() {
                 type="number"
                 min={1}
                 value={syncInterval}
-                onChange={(e) => setSyncInterval(e.target.value)}
+                onChange={(e) => {
+                  setSyncInterval(e.target.value);
+                  markDirty();
+                }}
                 className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
               />
             </Field>
@@ -127,7 +137,10 @@ export default function Settings() {
                 type="number"
                 min={1}
                 value={keepDays}
-                onChange={(e) => setKeepDays(e.target.value)}
+                onChange={(e) => {
+                  setKeepDays(e.target.value);
+                  markDirty();
+                }}
                 className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
               />
             </Field>

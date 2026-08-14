@@ -33,7 +33,9 @@ function Card({
       </header>
       <ul className="flex-1 divide-y divide-zinc-800/60 px-3 py-1">
         {items.map((item) => (
-          <ArticleListItem key={item.id} item={item} />
+          <li key={item.id}>
+            <ArticleListItem item={item} />
+          </li>
         ))}
         {items.length === 0 && <li className="py-4 text-sm text-zinc-600">No articles yet.</li>}
       </ul>
