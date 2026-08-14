@@ -3,6 +3,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use axum::http::{StatusCode, header};
 use serde::Deserialize;
+use serde_json::{Value, json};
 
 use crate::api::error::{ApiError, ApiResult};
 use crate::dto::{ArticleDetail, Headline};
@@ -57,18 +58,66 @@ pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams
     Ok(Json(state.engine.get_headlines(filter).await?))
 }
 
+#[derive(Deserialize)]
+pub struct PatchArticleRequest {
+    pub read: Option<bool>,
+    pub saved: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct MarkReadRequest {
+    pub read: Option<bool>,
+}
+
 pub async fn detail(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<ArticleDetail>> {
-    match state.engine.get_article_detail(&id).await {
-        Ok(mut article) => {
-            let (note, tags) = state.app_db.lock().await.note_and_tags(&id)?;
-            article.note = note;
-            article.tags = tags;
-            state.engine.render_article_content(&mut article).await?;
-            Ok(Json(article))
-        }
-        Err(error) if crate::engine::is_not_found(&error) => Err(ApiError::not_found("article not found")),
-        Err(error) => Err(ApiError::from(error)),
+    let mut article = state.engine.get_article_detail(&id).await?;
+    let (note, tags) = state.app_db.lock().await.note_and_tags(&id)?;
+    article.note = note;
+    article.tags = tags;
+    state.engine.render_article_content(&mut article).await?;
+    Ok(Json(article))
+}
+
+pub async fn patch_article(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<PatchArticleRequest>,
+) -> ApiResult<Json<Value>> {
+    if req.read.is_none() && req.saved.is_none() {
+        return Err(ApiError::bad_request("nothing to update"));
     }
+    if let Some(read) = req.read {
+        state.engine.set_article_read(&id, read).await?;
+    }
+    if let Some(saved) = req.saved {
+        state.engine.mark_article_saved(&id, saved).await?;
+        let mut app_db = state.app_db.lock().await;
+        if saved {
+            app_db.save_article(&id, None, &[])?;
+        } else {
+            app_db.unsave_article(&id)?;
+        }
+    }
+    Ok(Json(json!({ "ok": true })))
+}
+
+pub async fn mark_read(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<MarkReadRequest>,
+) -> ApiResult<Json<Value>> {
+    state.engine.set_article_read(&id, req.read.unwrap_or(true)).await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+pub async fn unread(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    state.engine.set_article_read(&id, false).await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+pub async fn read_all(State(state): State<AppState>) -> ApiResult<Json<Value>> {
+    state.engine.mark_all_read().await?;
+    Ok(Json(json!({ "ok": true })))
 }
 
 pub async fn favicon(State(state): State<AppState>, Path(feed_id): Path<String>) -> Response {

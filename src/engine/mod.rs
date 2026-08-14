@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use news_flash::error::{DatabaseError, NewsFlashError};
+use news_flash::error::NewsFlashError;
 use news_flash::feed_api::FeedHeaderMap;
 use news_flash::models::{ArticleFilter, CategoryID, FeedID, FeedMapping, Marked, PluginID, Read, Url};
 use news_flash::NewsFlash;
@@ -415,6 +415,20 @@ impl Engine {
         Ok(())
     }
 
+    pub async fn set_article_read(&self, id: &str, read: bool) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        let article_id = news_flash::models::ArticleID::new(id);
+        let read = if read { news_flash::models::Read::Read } else { news_flash::models::Read::Unread };
+        self.nf.set_article_read(&[article_id], read, &self.client).await?;
+        Ok(())
+    }
+
+    pub async fn mark_all_read(&self) -> anyhow::Result<()> {
+        let _guard = self.mutation_guard().await;
+        self.nf.set_all_read(&self.client).await?;
+        Ok(())
+    }
+
     pub async fn get_article_detail(&self, article_id: &str) -> anyhow::Result<ArticleDetail> {
         let id = news_flash::models::ArticleID::new(article_id);
         let a = self.with_nf(move |nf| nf.get_fat_article(&id)).await?;
@@ -468,13 +482,6 @@ impl Engine {
             None => Ok(None),
         }
     }
-}
-
-pub fn is_not_found(error: &anyhow::Error) -> bool {
-    matches!(
-        error.downcast_ref::<NewsFlashError>(),
-        Some(NewsFlashError::Database(DatabaseError::Query(diesel::result::Error::NotFound)))
-    )
 }
 
 #[cfg(test)]

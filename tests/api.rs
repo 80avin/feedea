@@ -343,3 +343,98 @@ async fn saved_and_tag_filters() {
     assert_eq!(arr.len(), 1);
     assert_eq!(arr[0]["id"], id);
 }
+
+async fn unread_state(app: &axum::Router, cookie: &str, id: &str) -> bool {
+    let resp = app.clone()
+        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10")
+            .header(axum::http::header::COOKIE, cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    json.as_array().unwrap().iter().find(|a| a["id"] == id).unwrap()["unread"].as_bool().unwrap()
+}
+
+#[tokio::test]
+async fn patch_read_then_unread_toggle_updates_state() {
+    let (feed_url, app, _server, _db, _dir) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+    add_and_sync(&app, &cookie, &feed_url).await;
+
+    let list_resp = app.clone()
+        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    assert_eq!(list_resp.status(), StatusCode::OK);
+    let body = list_resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let arr = json.as_array().unwrap();
+    assert_eq!(arr.len(), 2);
+    let id = arr[0]["id"].as_str().unwrap().to_string();
+    assert!(unread_state(&app, &cookie, &id).await);
+
+    let patch_resp = app.clone()
+        .oneshot(Request::builder().method("PATCH")
+            .uri(format!("/api/articles/{id}"))
+            .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::from(r#"{"read":true}"#)).unwrap())
+        .await.unwrap();
+    assert_eq!(patch_resp.status(), StatusCode::OK);
+    assert!(!unread_state(&app, &cookie, &id).await);
+
+    let unread_resp = app.clone()
+        .oneshot(Request::builder().method("POST")
+            .uri(format!("/api/articles/{id}/unread"))
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    assert_eq!(unread_resp.status(), StatusCode::OK);
+    assert!(unread_state(&app, &cookie, &id).await);
+
+    let read_resp = app.clone()
+        .oneshot(Request::builder().method("POST")
+            .uri(format!("/api/articles/{id}/read"))
+            .header("content-type", "application/json")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::from("{}")).unwrap())
+        .await.unwrap();
+    assert_eq!(read_resp.status(), StatusCode::OK);
+    assert!(!unread_state(&app, &cookie, &id).await);
+}
+
+#[tokio::test]
+async fn read_all_marks_everything_read() {
+    let (feed_url, app, _server, _db, _dir) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+    add_and_sync(&app, &cookie, &feed_url).await;
+
+    let overview_resp = app.clone()
+        .oneshot(Request::builder().uri("/api/overview")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    assert_eq!(overview_resp.status(), StatusCode::OK);
+    let body = overview_resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(json["all"]["unread_count"].as_i64().unwrap() > 0);
+
+    let read_all_resp = app.clone()
+        .oneshot(Request::builder().method("POST")
+            .uri("/api/read-all")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    assert_eq!(read_all_resp.status(), StatusCode::OK);
+
+    let overview_after = app.clone()
+        .oneshot(Request::builder().uri("/api/overview")
+            .header(axum::http::header::COOKIE, &cookie)
+            .body(Body::empty()).unwrap())
+        .await.unwrap();
+    assert_eq!(overview_after.status(), StatusCode::OK);
+    let body = overview_after.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["all"]["unread_count"], 0);
+}
