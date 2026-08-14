@@ -66,8 +66,12 @@ export function useSuggestions(q: string): { suggestions: Headline[]; isFetching
   return { suggestions: data?.suggestions ?? [], isFetching };
 }
 
-export function useSettings() {
-  return useQuery({ queryKey: queryKeys.settings, queryFn: () => api.get<Settings>("/api/settings") });
+export function useSettings(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => api.get<Settings>("/api/settings"),
+    enabled,
+  });
 }
 
 interface ArticlesQueryResult {
@@ -314,8 +318,12 @@ export function useChangePassword() {
 export function useUpdateSettings() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { theme?: string; sync_interval_minutes?: number; keep_articles_days?: number | null }) =>
-      api.patch("/api/settings", patch),
+    mutationFn: (patch: {
+      theme?: string;
+      accent?: string;
+      sync_interval_minutes?: number;
+      keep_articles_days?: number | null;
+    }) => api.patch("/api/settings", patch),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
     },

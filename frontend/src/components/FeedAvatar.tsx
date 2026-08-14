@@ -15,7 +15,7 @@ export default function FeedAvatar({
   if (failed) {
     const letter = (title?.trim()?.[0] ?? "?").toUpperCase();
     return (
-      <div className={`flex shrink-0 items-center justify-center rounded-full bg-zinc-800 font-semibold text-zinc-400 ${className ?? ""}`}>
+      <div className={`flex shrink-0 items-center justify-center rounded-full bg-app-surface-2 font-semibold text-app-text-muted ${className ?? ""}`}>
         {letter}
       </div>
     );

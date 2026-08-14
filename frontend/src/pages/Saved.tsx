@@ -24,7 +24,7 @@ export default function Saved() {
   return (
     <div className="flex h-full flex-col p-4">
       <div className="flex items-center gap-2">
-        <BookmarkIcon className="h-5 w-5 text-zinc-400" />
+        <BookmarkIcon className="h-5 w-5 text-app-text-muted" />
         <h2 className="text-lg font-semibold">Saved</h2>
       </div>
 
@@ -32,27 +32,27 @@ export default function Saved() {
       {isError && <div className="mt-4"><ErrorState error={error} onRetry={() => refetch()} /></div>}
       {data && (
         <div className="mt-4 flex-1 space-y-6 overflow-y-auto">
-          {data.months.length === 0 && <p className="text-sm text-zinc-600">Nothing saved yet.</p>}
+          {data.months.length === 0 && <p className="text-sm text-app-text-faint">Nothing saved yet.</p>}
           {data.months.map((group) => (
             <section key={group.month}>
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">{monthLabel(group.month)}</h3>
-              <ul className="divide-y divide-zinc-800/60">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-app-text-faint">{monthLabel(group.month)}</h3>
+              <ul className="divide-y divide-app-border/60">
                 {group.items.map((item) => (
                   <li key={item.id} className="py-2">
                     <div className="flex items-start gap-2">
                       <Link to={`/feeds/${encodeId(item.id)}`} className="group min-w-0 flex-1">
                         {item.title && (
-                          <p className={`truncate text-sm ${item.unread ? "font-semibold text-zinc-100" : "text-zinc-300"}`}>
+                          <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>
                             {item.title}
                           </p>
                         )}
-                        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-500">
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-app-text-faint">
                           {item.date && <span>{formatAge(item.date)}</span>}
                           {item.date && item.feed_title && <span aria-hidden="true">·</span>}
                           {item.feed_title && <span className="truncate">{item.feed_title}</span>}
                         </p>
                         {item.note && (
-                          <p className="mt-1 line-clamp-2 text-xs text-zinc-400">{item.note}</p>
+                          <p className="mt-1 line-clamp-2 text-xs text-app-text-muted">{item.note}</p>
                         )}
                         {item.tags && item.tags.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -67,7 +67,7 @@ export default function Saved() {
                           type="button"
                           aria-label="Edit note and tags"
                           onClick={() => setEditId(item.id)}
-                          className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
+                          className="rounded-md p-1.5 text-app-text-muted hover:bg-app-hover hover:text-app-text"
                         >
                           <PencilSquareIcon className="h-4 w-4" />
                         </button>
@@ -75,7 +75,7 @@ export default function Saved() {
                           type="button"
                           aria-label="Unsave"
                           onClick={() => unsave.mutate({ id: item.id })}
-                          className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-red-400"
+                          className="rounded-md p-1.5 text-app-text-muted hover:bg-app-hover hover:text-red-500 dark:hover:text-red-400"
                         >
                           <XMarkIcon className="h-4 w-4" />
                         </button>

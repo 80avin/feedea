@@ -64,6 +64,7 @@ export interface SettingsStats {
 
 export interface Settings {
   theme: string | null;
+  accent: string | null;
   sync_interval_minutes: number;
   keep_articles_days: number | null;
   stats: SettingsStats;

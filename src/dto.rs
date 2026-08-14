@@ -87,6 +87,7 @@ pub struct SettingsStats {
 #[derive(Serialize, Debug)]
 pub struct Settings {
     pub theme: Option<String>,
+    pub accent: Option<String>,
     pub sync_interval_minutes: i64,
     pub keep_articles_days: Option<i64>,
     pub stats: SettingsStats,

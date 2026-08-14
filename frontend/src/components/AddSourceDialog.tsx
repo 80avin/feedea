@@ -101,7 +101,7 @@ export default function AddSourceDialog({ open, onClose }: AddSourceDialogProps)
             </Modal.Header>
             <Modal.Body>
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-zinc-300">URL</span>
+                <span className="text-sm font-medium text-app-text-2">URL</span>
                 <div className="flex gap-2">
                   <Input
                     name="url"
@@ -117,14 +117,14 @@ export default function AddSourceDialog({ open, onClose }: AddSourceDialogProps)
               </label>
 
               {nothingFound && (
-                <p className="text-sm text-amber-400">
+                <p className="text-sm text-amber-600 dark:text-amber-400">
                   No feed found at that URL — it will be added as-is.
                 </p>
               )}
 
               {discovered && discovered.alternatives.length > 0 && (
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs font-medium text-zinc-400">Feeds found:</span>
+                  <span className="text-xs font-medium text-app-text-muted">Feeds found:</span>
                   {discovered.alternatives.map((alt) => (
                     <button
                       key={alt.url}
@@ -133,19 +133,19 @@ export default function AddSourceDialog({ open, onClose }: AddSourceDialogProps)
                       className={clsx(
                         "flex flex-col items-start rounded-md border px-3 py-2 text-left text-sm",
                         chosenFeedUrl === alt.url
-                          ? "border-zinc-400 bg-zinc-800"
-                          : "border-zinc-800 hover:border-zinc-700",
+                          ? "border-accent bg-accent-soft"
+                          : "border-app-border hover:border-app-border-strong",
                       )}
                     >
-                      <span className="font-medium text-zinc-100">{alt.label || alt.url}</span>
-                      <span className="break-all text-xs text-zinc-500">{alt.url}</span>
+                      <span className="font-medium text-app-text">{alt.label || alt.url}</span>
+                      <span className="break-all text-xs text-app-text-faint">{alt.url}</span>
                     </button>
                   ))}
                 </div>
               )}
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-zinc-300">Title</span>
+                <span className="text-sm font-medium text-app-text-2">Title</span>
                 <Input
                   name="title"
                   value={title}
@@ -156,11 +156,11 @@ export default function AddSourceDialog({ open, onClose }: AddSourceDialogProps)
               </label>
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-zinc-300">Category</span>
+                <span className="text-sm font-medium text-app-text-2">Category</span>
                 <select
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
-                  className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
+                  className="rounded-md border border-app-border-strong bg-app-surface px-3 py-2 text-sm text-app-text outline-none focus:border-accent"
                 >
                   <option value="">No category</option>
                   {categories.map((c) => (
@@ -172,7 +172,7 @@ export default function AddSourceDialog({ open, onClose }: AddSourceDialogProps)
                 </select>
               </label>
 
-              {error && <p className="text-sm text-red-400">{error}</p>}
+              {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             </Modal.Body>
             <Modal.Footer>
               <Button variant="ghost" size="sm" onPress={onClose} isDisabled={pending}>

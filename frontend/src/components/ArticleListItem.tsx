@@ -12,8 +12,8 @@ export default function ArticleListItem({ item, hideFeed }: { item: Headline; hi
   return (
     <div className="flex items-start justify-between gap-3 py-2">
       <div className="min-w-0 flex-1">
-        {item.title && <p className={`truncate text-sm ${item.unread ? "font-semibold text-zinc-100" : "text-zinc-300"}`}>{item.title}</p>}
-        {!hideFeed && item.feed_title && <p className="truncate text-xs text-zinc-500">{item.feed_title}</p>}
+        {item.title && <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>{item.title}</p>}
+        {!hideFeed && item.feed_title && <p className="truncate text-xs text-app-text-faint">{item.feed_title}</p>}
       </div>
       {item.thumbnail_url && !thumbFailed && (
         <img
@@ -24,8 +24,8 @@ export default function ArticleListItem({ item, hideFeed }: { item: Headline; hi
           className="h-10 w-14 shrink-0 rounded-md object-cover"
         />
       )}
-      <div className="flex shrink-0 items-center gap-2 text-xs text-zinc-500">
-        {item.marked && <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">Saved</span>}
+      <div className="flex shrink-0 items-center gap-2 text-xs text-app-text-faint">
+        {item.marked && <span className="rounded bg-app-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">Saved</span>}
         <span className="whitespace-nowrap">{item.date ? formatDate(item.date) : ""}</span>
       </div>
     </div>

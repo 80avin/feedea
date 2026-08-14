@@ -8,18 +8,18 @@ export default function Shell() {
 
   if (isError) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-100">
+      <main className="flex min-h-screen items-center justify-center bg-app-bg text-app-text">
         <ErrorState error={error} onRetry={retry} />
       </main>
     );
   }
 
   if (loading || !session?.authenticated) {
-    return <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-100">Loading...</main>;
+    return <main className="flex min-h-screen items-center justify-center bg-app-bg text-app-text">Loading...</main>;
   }
 
   return (
-    <div className="bg-zinc-950 text-zinc-100">
+    <div className="bg-app-bg text-app-text">
       <DesktopLayout />
       <MobileLayout />
     </div>

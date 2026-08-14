@@ -29,7 +29,7 @@ export default function Feeds() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 px-4 pt-4">
-        <RssIcon className="h-5 w-5 text-zinc-400" />
+        <RssIcon className="h-5 w-5 text-app-text-muted" />
         <h2 className="text-lg font-semibold">Feeds</h2>
       </div>
 

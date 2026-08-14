@@ -24,13 +24,13 @@ function Card({
   showStats?: boolean;
 }) {
   return (
-    <section className="flex flex-col overflow-hidden rounded-lg border border-zinc-800">
-      <header className="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2">
+    <section className="flex flex-col overflow-hidden rounded-lg border border-app-border">
+      <header className="flex items-center justify-between gap-2 border-b border-app-border px-3 py-2">
         <h3 className="text-sm font-semibold">{name}</h3>
-        <span className="text-xs text-zinc-500">
+        <span className="text-xs text-app-text-faint">
           {unreadCount > 0 ? (
             <>
-              <span className="font-semibold text-zinc-100">{unreadCount}</span> unread ·{" "}
+              <span className="font-semibold text-app-text">{unreadCount}</span> unread ·{" "}
             </>
           ) : null}
           {totalCount} total
@@ -39,28 +39,28 @@ function Card({
       {showStats ? (
         <div className="flex flex-1 items-center justify-around px-3 py-6">
           <div className="text-center">
-            <p className="text-2xl font-bold text-zinc-100">{unreadCount}</p>
-            <p className="text-xs text-zinc-500">unread</p>
+            <p className="text-2xl font-bold text-app-text">{unreadCount}</p>
+            <p className="text-xs text-app-text-faint">unread</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-zinc-100">{totalCount}</p>
-            <p className="text-xs text-zinc-500">articles</p>
+            <p className="text-2xl font-bold text-app-text">{totalCount}</p>
+            <p className="text-xs text-app-text-faint">articles</p>
           </div>
         </div>
       ) : (
-        <ul className="flex-1 divide-y divide-zinc-800/60 px-3 py-1">
+        <ul className="flex-1 divide-y divide-app-border/60 px-3 py-1">
           {items.map((item) => (
             <li key={item.id}>
               <ArticleListItem item={item} />
             </li>
           ))}
-          {items.length === 0 && <li className="py-4 text-sm text-zinc-600">No articles yet.</li>}
+          {items.length === 0 && <li className="py-4 text-sm text-app-text-faint">No articles yet.</li>}
         </ul>
       )}
       {linkTo && (
         <Link
           to={linkTo}
-          className="flex items-center gap-1 border-t border-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-100"
+          className="flex items-center gap-1 border-t border-app-border px-3 py-1.5 text-xs font-medium text-app-text-muted hover:text-app-text"
         >
           {moreLabel}
           <ArrowRightIcon className="h-3.5 w-3.5" />
@@ -73,10 +73,10 @@ function Card({
 function EmptyState() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <p className="text-sm text-zinc-400">No feeds yet — add sources</p>
+      <p className="text-sm text-app-text-muted">No feeds yet — add sources</p>
       <Link
         to="/sources"
-        className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-100 hover:bg-zinc-700"
+        className="rounded-md bg-app-surface-2 px-3 py-1.5 text-sm font-medium text-app-text hover:bg-app-selected"
       >
         Add sources
       </Link>
@@ -90,7 +90,7 @@ export default function Overview() {
   return (
     <div className="flex h-full flex-col p-4">
       <div className="flex items-center gap-2">
-        <Squares2X2Icon className="h-5 w-5 text-zinc-400" />
+        <Squares2X2Icon className="h-5 w-5 text-app-text-muted" />
         <h2 className="text-lg font-semibold">Overview</h2>
       </div>
 

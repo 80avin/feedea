@@ -33,7 +33,7 @@ export default function Reader() {
 
   if (!id) {
     return (
-      <div className="flex h-full items-center justify-center p-6 text-sm text-zinc-500">
+      <div className="flex h-full items-center justify-center p-6 text-sm text-app-text-faint">
         Select an article to read it here.
       </div>
     );
@@ -57,14 +57,14 @@ export default function Reader() {
             type="button"
             onClick={goBack}
             aria-label="Back to feeds"
-            className="rounded-md p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 lg:hidden"
+            className="rounded-md p-1 text-app-text-muted hover:bg-app-hover hover:text-app-text lg:hidden"
           >
             <ChevronLeftIcon className="h-6 w-6" />
           </button>
-          {data.title && <h1 className="text-xl font-semibold leading-snug text-zinc-100">{data.title}</h1>}
+          {data.title && <h1 className="text-xl font-semibold leading-snug text-app-text">{data.title}</h1>}
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400" data-reader-meta>
-          {data.feed_title && <span className="font-medium text-zinc-300">{data.feed_title}</span>}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-app-text-muted" data-reader-meta>
+          {data.feed_title && <span className="font-medium text-app-text-2">{data.feed_title}</span>}
           {data.author && <span>by {data.author}</span>}
           <span>{formatAge(data.date)}</span>
           <span>{new Date(data.date).toLocaleDateString()}</span>
@@ -73,7 +73,7 @@ export default function Reader() {
               href={data.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="truncate text-sky-400 hover:text-sky-300"
+              className="truncate text-accent hover:text-accent-soft-foreground"
             >
               {hostOf(data.url)}
             </a>
@@ -89,7 +89,7 @@ export default function Reader() {
       </div>
 
       <div
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-zinc-800 bg-zinc-950/95 px-4 py-1.5 backdrop-blur lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-app-border bg-app-bg/95 px-4 py-1.5 backdrop-blur lg:hidden"
         data-reader-bar
       >
         <ReaderActions article={data} onSaveClick={() => setSaveOpen(true)} layout="bar" />

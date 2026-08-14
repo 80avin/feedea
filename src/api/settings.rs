@@ -19,6 +19,7 @@ where
 #[derive(Deserialize)]
 pub struct UpdateSettings {
     pub theme: Option<String>,
+    pub accent: Option<String>,
     pub sync_interval_minutes: Option<i64>,
     #[serde(default, deserialize_with = "deserialize_keep_articles_days")]
     pub keep_articles_days: Option<Option<i64>>,
@@ -33,12 +34,14 @@ pub struct PasswordChange {
 pub async fn get(State(state): State<AppState>) -> ApiResult<Json<Settings>> {
     let app_db = state.app_db.lock().await;
     let theme = app_db.theme()?;
+    let accent = app_db.accent()?;
     let sync_interval_minutes = app_db.sync_interval_minutes()?;
     drop(app_db);
     let keep_articles_days = state.engine.keep_articles_days().await?;
     let stats = build_stats(&state).await?;
     Ok(Json(Settings {
         theme,
+        accent,
         sync_interval_minutes,
         keep_articles_days,
         stats,
@@ -48,6 +51,9 @@ pub async fn get(State(state): State<AppState>) -> ApiResult<Json<Settings>> {
 pub async fn update(State(state): State<AppState>, Json(req): Json<UpdateSettings>) -> ApiResult<Json<Value>> {
     if let Some(theme) = &req.theme {
         state.app_db.lock().await.set_theme(theme)?;
+    }
+    if let Some(accent) = &req.accent {
+        state.app_db.lock().await.set_accent(accent)?;
     }
     if let Some(minutes) = req.sync_interval_minutes {
         if minutes <= 0 {

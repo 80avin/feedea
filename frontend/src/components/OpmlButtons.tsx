@@ -61,7 +61,7 @@ export default function OpmlButtons() {
         <ArrowDownTrayIcon className="h-4 w-4" />
         Export
       </Button>
-      {status && <span className="max-w-40 truncate text-xs text-zinc-500">{status}</span>}
+      {status && <span className="max-w-40 truncate text-xs text-app-text-faint">{status}</span>}
     </div>
   );
 }

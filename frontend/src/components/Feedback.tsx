@@ -13,18 +13,18 @@ export function formatError(error: unknown): string {
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-zinc-800 ${className ?? ""}`} />;
+  return <div className={`animate-pulse rounded-md bg-app-surface-2 ${className ?? ""}`} />;
 }
 
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-lg border border-zinc-800 p-6 text-center">
-      <p className="text-sm text-red-400">{formatError(error)}</p>
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-app-border p-6 text-center">
+      <p className="text-sm text-red-600 dark:text-red-400">{formatError(error)}</p>
       {onRetry && (
         <button
           type="button"
           onClick={onRetry}
-          className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-100 hover:bg-zinc-700"
+          className="rounded-md bg-app-surface-2 px-3 py-1.5 text-sm font-medium text-app-text hover:bg-app-selected"
         >
           Retry
         </button>
@@ -39,7 +39,7 @@ export function LoadingState({ label }: { label?: string }) {
       {Array.from({ length: 3 }).map((_, i) => (
         <Skeleton key={i} className="h-16 w-full" />
       ))}
-      {label && <p className="text-sm text-zinc-500">{label}</p>}
+      {label && <p className="text-sm text-app-text-faint">{label}</p>}
     </div>
   );
 }

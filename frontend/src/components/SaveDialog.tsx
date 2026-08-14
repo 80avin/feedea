@@ -74,7 +74,7 @@ export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps
             <Modal.Body>
               {isError && <ErrorState error={articleError} onRetry={() => refetch()} />}
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-zinc-300">Note</span>
+                <span className="text-sm font-medium text-app-text-2">Note</span>
                 <TextArea
                   name="note"
                   value={note}
@@ -83,7 +83,7 @@ export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps
                 />
               </label>
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-zinc-300">Tags</span>
+                <span className="text-sm font-medium text-app-text-2">Tags</span>
                 <Input
                   name="tags"
                   value={tagsText}
@@ -94,7 +94,7 @@ export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps
               </label>
               {suggestions.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs text-zinc-500">Suggestions:</span>
+                  <span className="text-xs text-app-text-faint">Suggestions:</span>
                   {suggestions.map((tag) => (
                     <Chip key={tag} size="sm" variant="soft" onClick={() => applySuggestion(tag)}>
                       {tag}
@@ -102,7 +102,7 @@ export default function SaveDialog({ open, articleId, onClose }: SaveDialogProps
                   ))}
                 </div>
               )}
-              {error && <p className="text-sm text-red-400">{error}</p>}
+              {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             </Modal.Body>
             <Modal.Footer>
               <Button variant="ghost" size="sm" onPress={onClose} isDisabled={pending}>

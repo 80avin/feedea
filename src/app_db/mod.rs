@@ -54,6 +54,8 @@ impl AppDb {
 
     pub fn theme(&self) -> anyhow::Result<Option<String>> { self.get_setting("theme") }
     pub fn set_theme(&mut self, theme: &str) -> anyhow::Result<()> { self.set_setting("theme", theme) }
+    pub fn accent(&self) -> anyhow::Result<Option<String>> { self.get_setting("accent") }
+    pub fn set_accent(&mut self, accent: &str) -> anyhow::Result<()> { self.set_setting("accent", accent) }
     pub fn sync_interval_minutes(&self) -> anyhow::Result<i64> {
         Ok(self.get_setting("sync_interval_minutes")?.and_then(|s| s.parse().ok()).unwrap_or(30))
     }

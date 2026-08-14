@@ -28,7 +28,7 @@ const items: Item[] = [
 
 export default function BottomNav() {
   return (
-    <nav className="flex border-t border-zinc-800 bg-zinc-950">
+    <nav className="flex border-t border-app-border bg-app-bg">
       {items.map(({ to, label, icon: Icon, end }) => (
         <NavLink
           key={to}
@@ -37,7 +37,7 @@ export default function BottomNav() {
           className={({ isActive }) =>
             clsx(
               "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium",
-              isActive ? "text-zinc-100" : "text-zinc-500",
+              isActive ? "text-accent-soft-foreground" : "text-app-text-muted",
             )
           }
         >

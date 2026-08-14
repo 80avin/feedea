@@ -59,15 +59,15 @@ function RenameDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolea
             </Modal.Header>
             <Modal.Body>
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-zinc-300">Title</span>
+                <span className="text-sm font-medium text-app-text-2">Title</span>
                 <Input name="title" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Title" />
               </label>
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-zinc-300">Category</span>
+                <span className="text-sm font-medium text-app-text-2">Category</span>
                 <select
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
-                  className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
+                  className="rounded-md border border-app-border-strong bg-app-surface px-3 py-2 text-sm text-app-text outline-none focus:border-accent"
                 >
                   <option value="">No category</option>
                   {categories.map((c) => (
@@ -78,7 +78,7 @@ function RenameDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolea
                   ))}
                 </select>
               </label>
-              {error && <p className="text-sm text-red-400">{error}</p>}
+              {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             </Modal.Body>
             <Modal.Footer>
               <Button variant="ghost" size="sm" onPress={onClose} isDisabled={updateFeed.isPending}>
@@ -124,10 +124,10 @@ function DeleteDialog({ feed, open, onClose }: { feed: FeedSummary; open: boolea
               <Modal.Heading>Delete source</Modal.Heading>
             </Modal.Header>
             <Modal.Body>
-              <p className="text-sm text-zinc-300">
+              <p className="text-sm text-app-text-2">
                 Delete “{feed.title}” and remove its articles? This cannot be undone.
               </p>
-              {error && <p className="text-sm text-red-400">{error}</p>}
+              {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             </Modal.Body>
             <Modal.Footer>
               <Button variant="ghost" size="sm" onPress={onClose} isDisabled={deleteFeed.isPending}>
@@ -162,7 +162,7 @@ export default function SourceMenu({ feed }: { feed: FeedSummary }) {
       <Dropdown>
         <Dropdown.Trigger
           aria-label={`Menu for ${feed.title}`}
-          className="rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
+          className="rounded-md p-1 text-app-text-muted hover:bg-app-hover hover:text-app-text"
         >
           <EllipsisVerticalIcon className="h-5 w-5" />
         </Dropdown.Trigger>

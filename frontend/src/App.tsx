@@ -9,6 +9,12 @@ import Saved from "./pages/Saved";
 import Settings from "./pages/Settings";
 import Sources from "./pages/Sources";
 import Help from "./pages/Help";
+import { useTheme } from "./theme/useTheme";
+
+function ThemeManager() {
+  useTheme();
+  return null;
+}
 
 function SourcesSlideOver({ onClose }: { onClose: () => void }) {
   return (
@@ -19,13 +25,13 @@ function SourcesSlideOver({ onClose }: { onClose: () => void }) {
         onClick={onClose}
         className="absolute inset-0 cursor-default bg-black/50"
       />
-      <aside className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-zinc-800 bg-zinc-950 shadow-2xl">
+      <aside className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-app-border bg-app-bg shadow-2xl">
         <div className="flex items-center justify-end p-2">
           <button
             type="button"
             onClick={onClose}
             aria-label="Close sources panel"
-            className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="rounded-md p-1.5 text-app-text-muted hover:bg-app-hover hover:text-app-text"
           >
             <XMarkIcon className="h-5 w-5" />
           </button>
@@ -50,6 +56,7 @@ export default function App() {
 
   return (
     <>
+      <ThemeManager />
       <Routes location={background ?? location}>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Shell />}>

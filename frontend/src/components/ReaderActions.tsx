@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { ComponentType } from "react";
-import { Button } from "@heroui/react";
 import {
   ArrowTopRightOnSquareIcon,
   BookmarkIcon,
@@ -114,8 +113,8 @@ export default function ReaderActions({ article, onSaveClick, layout = "row", cl
             disabled={action.disabled || action.pending}
             className={clsx(
               "flex min-w-0 flex-1 flex-col items-center gap-1 py-1.5 text-[11px] font-medium",
-              action.danger ? "text-red-400" : action.primary ? "text-zinc-100" : "text-zinc-400",
-              action.disabled || action.pending ? "cursor-not-allowed opacity-50" : "hover:text-zinc-100",
+              action.danger ? "text-red-500 dark:text-red-400" : action.primary ? "text-app-text" : "text-app-text-muted",
+              action.disabled || action.pending ? "cursor-not-allowed opacity-50" : "hover:text-app-text",
             )}
           >
             <action.icon className="h-5 w-5" />
@@ -127,18 +126,26 @@ export default function ReaderActions({ article, onSaveClick, layout = "row", cl
   }
 
   return (
-    <div className={clsx("flex flex-wrap items-center gap-2", className)} data-reader-actions>
+    <div className={clsx("flex flex-wrap items-center gap-1.5", className)} data-reader-actions>
       {actions.map((action) => (
-        <Button
+        <button
           key={action.key}
-          size="sm"
-          variant={action.danger ? "danger-soft" : action.primary ? "primary" : "secondary"}
-          onPress={action.onPress}
-          isDisabled={action.disabled || action.pending}
+          type="button"
+          onClick={action.onPress}
+          disabled={action.disabled || action.pending}
+          className={clsx(
+            "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+            action.danger
+              ? "border-red-600/40 text-red-600 hover:bg-red-500/10 dark:border-red-500/40 dark:text-red-400 dark:hover:bg-red-500/10"
+              : action.primary
+                ? "border-accent/40 bg-accent-soft text-accent-soft-foreground hover:bg-accent-soft-hover"
+                : "border-app-border text-app-text-2 hover:bg-app-hover/60 hover:text-app-text",
+            action.disabled || action.pending ? "cursor-not-allowed opacity-50" : "",
+          )}
         >
-          <action.icon className="h-4 w-4" />
+          <action.icon className="h-3.5 w-3.5" />
           {action.label}
-        </Button>
+        </button>
       ))}
     </div>
   );
