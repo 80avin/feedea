@@ -77,6 +77,11 @@ fn is_v4_reserved(addr: Ipv4Addr) -> bool {
     addr.octets()[0] >= 240
 }
 
+fn is_v4_cgnat(addr: Ipv4Addr) -> bool {
+    let octets = addr.octets();
+    octets[0] == 100 && (octets[1] & 0xC0) == 0x40
+}
+
 fn is_v6_reserved(addr: Ipv6Addr) -> bool {
     let segments = addr.segments();
     segments[0] < 0x100 || (segments[0] & 0xFFC0) == 0xFEC0
@@ -96,7 +101,8 @@ fn is_blocked_ip(ip: IpAddr) -> bool {
                 || v4.is_unspecified()
                 || v4.is_broadcast()
                 || is_v4_reserved(v4)
-                || v4.is_documentation()
+                    || v4.is_documentation()
+                    || is_v4_cgnat(v4)
         }
         IpAddr::V6(v6) => {
             if let Some(v4) = v6.to_ipv4_mapped() {
@@ -106,7 +112,8 @@ fn is_blocked_ip(ip: IpAddr) -> bool {
                     || v4.is_unspecified()
                     || v4.is_broadcast()
                     || is_v4_reserved(v4)
-                    || v4.is_documentation();
+                    || v4.is_documentation()
+                    || is_v4_cgnat(v4);
             }
             v6.is_loopback()
                 || v6.is_unique_local()
@@ -155,6 +162,16 @@ mod tests {
             assert!(is_blocked_ip(ip.parse().unwrap()), "{ip} should be blocked");
         }
         assert!(!is_blocked_ip("::ffff:8.8.8.8".parse().unwrap()));
+    }
+
+    #[test]
+    fn blocks_cgnat_shared_space_with_boundaries() {
+        for ip in ["100.64.0.1", "100.127.255.1", "::ffff:100.64.0.1"] {
+            assert!(is_blocked_ip(ip.parse().unwrap()), "{ip} should be blocked");
+        }
+        for ip in ["100.63.255.1", "100.128.0.1"] {
+            assert!(!is_blocked_ip(ip.parse().unwrap()), "{ip} should be allowed");
+        }
     }
 
     #[test]
