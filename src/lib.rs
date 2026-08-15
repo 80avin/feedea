@@ -28,7 +28,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     let state = AppState { engine, app_db, allow_private_proxy: config.allow_private_proxy };
     auth::ensure_password_setup(&state).await?;
     let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port)).await?;
-    tracing::info!("rssea {} listening on {}", crate::version(), listener.local_addr()?);
+    tracing::info!("feedea {} listening on {}", crate::version(), listener.local_addr()?);
     axum::serve(listener, api::router(state)).await?;
     Ok(())
 }

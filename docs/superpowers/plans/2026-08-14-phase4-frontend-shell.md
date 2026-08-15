@@ -37,7 +37,7 @@
 
 ```json
 {
-  "name": "rssea-frontend",
+  "name": "feedea-frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -89,8 +89,8 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       manifest: {
-        name: "rssea",
-        short_name: "rssea",
+        name: "feedea",
+        short_name: "feedea",
         start_url: "/",
         display: "standalone",
         theme_color: "#0a0a0a",
@@ -142,7 +142,7 @@ export default defineConfig({
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0a0a" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <title>rssea</title>
+    <title>feedea</title>
   </head>
   <body>
     <div id="root"></div>
@@ -195,7 +195,7 @@ createRoot(document.getElementById("root")!).render(
 
 - [ ] **Step 7: `frontend/src/App.tsx` (placeholder) + `Login.tsx` + `Home.tsx` (placeholders)**
 
-`App.tsx` renders a minimal shell: a `<main>` with an h1 "rssea" and a `<Button>`-free placeholder. `Login.tsx` and `Home.tsx` are minimal functional components imported but the router wiring happens in Task 2; for Task 1 keep App minimal and compilable.
+`App.tsx` renders a minimal shell: a `<main>` with an h1 "feedea" and a `<Button>`-free placeholder. `Login.tsx` and `Home.tsx` are minimal functional components imported but the router wiring happens in Task 2; for Task 1 keep App minimal and compilable.
 
 - [ ] **Step 8: `frontend/.gitignore` + root .gitignore update**
 
@@ -242,7 +242,7 @@ git add frontend/ .gitignore && git commit -m "Phase 4: scaffold frontend with v
 
 - [ ] **Step 1: Write `src/api/types.ts`** (interfaces above; keep them minimal and matching the backend). No test (types are compile-checked).
 
-- [ ] **Step 2: Write `src/api/client.ts`** per the interface. Handle JSON errors; on 401 dispatch a window event `rssea:unauthorized` (useSession listens). No comments.
+- [ ] **Step 2: Write `src/api/client.ts`** per the interface. Handle JSON errors; on 401 dispatch a window event `feedea:unauthorized` (useSession listens). No comments.
 
 - [ ] **Step 3: Write `src/auth/useSession.ts`** per the interface. Use `useEffect` + state (or React Query `useQuery` for the session — React Query is fine: `useQuery({ queryKey: ["session"], queryFn: ... })`). On mount, if session not authenticated and path !== "/login", `useNavigate()("/login")`.
 
@@ -252,7 +252,7 @@ git add frontend/ .gitignore && git commit -m "Phase 4: scaffold frontend with v
 
 - [ ] **Step 6: Manual verification with the backend**
 
-Start the backend (`cargo run -- --data-dir /tmp/rssea-dev-data` from the repo root; note it prints an initial password to stderr on first run) and the frontend (`bun run dev`). Open `http://localhost:5173` → should redirect to `/login`; log in with the printed password → lands on Home. Verify in browser. (The initial password is random; you may also `PATCH /api/settings/password` after logging in. Alternatively seed via env — but the printed password flow is fine for a manual check.)
+Start the backend (`cargo run -- --data-dir /tmp/feedea-dev-data` from the repo root; note it prints an initial password to stderr on first run) and the frontend (`bun run dev`). Open `http://localhost:5173` → should redirect to `/login`; log in with the printed password → lands on Home. Verify in browser. (The initial password is random; you may also `PATCH /api/settings/password` after logging in. Alternatively seed via env — but the printed password flow is fine for a manual check.)
 
 - [ ] **Step 7: Commit**
 

@@ -1,7 +1,7 @@
 import { QuestionMarkCircleIcon } from "@heroicons/react/24/outline";
 
-const REPO_URL = "https://github.com/yourname/rssea";
-const ISSUES_URL = "https://github.com/yourname/rssea/issues";
+const REPO_URL = "https://github.com/yourname/feedea";
+const ISSUES_URL = "https://github.com/yourname/feedea/issues";
 
 export default function Help() {
   return (
@@ -51,7 +51,7 @@ export default function Help() {
 
         <section className="flex flex-col gap-3 rounded-lg border border-app-border p-4">
           <h3 className="font-semibold">About</h3>
-          <p className="text-app-text-muted">rssea is a self-hosted RSS feed aggregator.</p>
+          <p className="text-app-text-muted">feedea is a self-hosted RSS feed aggregator.</p>
           <div className="flex flex-wrap gap-2">
             <a
               href={REPO_URL}

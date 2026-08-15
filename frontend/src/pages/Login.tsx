@@ -33,7 +33,7 @@ export default function Login() {
     <main className="flex min-h-screen items-center justify-center bg-app-bg p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>rssea</CardTitle>
+          <CardTitle>feedea</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {session?.setup_required && (

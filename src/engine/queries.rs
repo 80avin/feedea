@@ -150,7 +150,7 @@ mod tests {
     #[tokio::test]
     async fn search_and_counts_against_newsflash_db() {
         let server = crate::engine::tests::FeedServer::start(crate::engine::tests::RSS.to_string(), 10);
-        let dir = std::env::temp_dir().join(format!("rssea-queries-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("feedea-queries-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let config = Config { data_dir: dir.clone(), host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
         let engine = Engine::new(&config).await.unwrap();

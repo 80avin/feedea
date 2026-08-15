@@ -42,7 +42,7 @@ pub async fn ensure_password_setup(state: &AppState) -> anyhow::Result<()> {
         let hash = hash_password(&password)?;
         app_db.set_password_hash(&hash)?;
         eprintln!("========================================================");
-        eprintln!("rssea initial password: {password}");
+        eprintln!("feedea initial password: {password}");
         eprintln!("log in at /api/login (use the web UI) and change it in Settings");
         eprintln!("========================================================");
     }
@@ -99,7 +99,7 @@ mod tests {
 
     #[tokio::test]
     async fn ensure_password_setup_is_idempotent() {
-        let dir = std::env::temp_dir().join(format!("rssea-auth-unit-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("feedea-auth-unit-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let config = Config { data_dir: dir.clone(), host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
         let engine = Engine::new(&config).await.unwrap();

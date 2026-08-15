@@ -1,12 +1,12 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use rssea::api;
-use rssea::app_db;
-use rssea::auth;
-use rssea::config::Config;
-use rssea::engine::Engine;
-use rssea::AppState;
+use feedea::api;
+use feedea::app_db;
+use feedea::auth;
+use feedea::config::Config;
+use feedea::engine::Engine;
+use feedea::AppState;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
@@ -43,7 +43,7 @@ async fn spawn_app() -> (String, axum::Router, feed_server::FeedServer, Arc<Mute
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let server = feed_server::FeedServer::start(RSS.to_string(), 10);
     let dir = std::env::temp_dir().join(format!(
-        "rssea-categories-test-{}-{}",
+        "feedea-categories-test-{}-{}",
         std::process::id(),
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));

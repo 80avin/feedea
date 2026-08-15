@@ -1,4 +1,4 @@
-# rssea — Frontend UX Polish Backlog
+# feedea — Frontend UX Polish Backlog
 
 Date: 2026-08-14
 Status: Collected from user feedback after Phase 5/6. All 15 items FIXED in Phase 7 (branch `feat/phase7-ux-polish`, commits `0f1f76a..fe1c689`). New audit findings recorded below (Importants fixed; notable minors deferred). This file is the committed record of what was done and what remains.
@@ -37,9 +37,9 @@ Found by the Task 1 audit (SDD `task-1-audit.md`); severity per that report.
 - Context-menu keyboard path: the custom `FeedContextMenu` is a `role="menu"` with mouse/touch input only — no arrow-key navigation/focus management yet.
 - The "Exported"/"Imported" status tooltip does not auto-dismiss.
 - Touch long-press was verified only via headless-Chrome CDP; the iOS Safari long-press gesture is untested on real hardware.
-- `rssea.avatar-colors` localStorage entries go stale when a feed is deleted.
+- `feedea.avatar-colors` localStorage entries go stale when a feed is deleted.
 - White text on the 2 lightest avatar palette swatches (contrast).
-- Dead placeholder repo links in Help/Settings (`github.com/yourname/rssea`).
+- Dead placeholder repo links in Help/Settings (`github.com/yourname/feedea`).
 - PWA manifest `theme_color`/`background_color` hardcoded dark, so window chrome stays dark in light theme (the runtime `theme-color` meta does follow the theme).
 - Per-row mounted `RenameDialog`/`DeleteDialog` subtrees on timeline/Overview rows (perf).
 - `autoMarkedReadIds` Set never clears (session-scoped, unbounded growth).

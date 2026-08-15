@@ -1,12 +1,12 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use rssea::api;
-use rssea::app_db;
-use rssea::auth;
-use rssea::config::Config;
-use rssea::engine::Engine;
-use rssea::AppState;
+use feedea::api;
+use feedea::app_db;
+use feedea::auth;
+use feedea::config::Config;
+use feedea::engine::Engine;
+use feedea::AppState;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
@@ -16,7 +16,7 @@ async fn spawn_app() -> axum::Router {
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
-        "rssea-auth-test-{}-{}",
+        "feedea-auth-test-{}-{}",
         std::process::id(),
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
@@ -79,7 +79,7 @@ async fn login_with_wrong_password_returns_401() {
 async fn login_with_correct_password_sets_session_cookie() {
     let app = spawn_app().await;
     let set_cookie = login_set_cookie(&app, "test-pass").await;
-    assert!(set_cookie.starts_with("rssea_session="));
+    assert!(set_cookie.starts_with("feedea_session="));
     assert!(set_cookie.contains("HttpOnly"));
     assert!(set_cookie.contains("SameSite=Lax"));
     assert!(set_cookie.contains("Path=/"));

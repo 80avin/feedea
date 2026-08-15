@@ -15,7 +15,7 @@
 - The read-only sidecar connection to news-flash's `database.sqlite` (WAL mode) is the ONLY way search and per-category totals work (news-flash FTS is broken upstream and has no count API). Keep all schema-coupling SQL in `src/engine/queries.rs`.
 - `ArticleFilter.order` must be `Some(NewestFirst)` + `order_by = Some(Published)` whenever deterministic ordering is needed.
 - DTOs in `src/dto.rs`. Error envelope `{error:{code,message}}` via `src/api/error.rs`.
-- Session cookie: name `rssea_session`, HttpOnly, `SameSite=Lax`, path `/`.
+- Session cookie: name `feedea_session`, HttpOnly, `SameSite=Lax`, path `/`.
 - Default keep-articles: `None` (keep everything). Default sync interval: 30 min.
 - All `/api/*` routes require a valid session EXCEPT `POST /api/login` and `GET /api/session`.
 - Commit after each task with the exact message given.
@@ -40,7 +40,7 @@
     - `pub fn sha256_hex(s: &str) -> String`
     - `pub async fn ensure_password_setup(state: &AppState) -> anyhow::Result<()>` — on startup, if no password_hash in settings, generates a random password, hashes + stores it, logs it to stdout ("Initial password: ...") so the user can log in once. Idempotent (only if absent).
   - AppDb additions (rusqlite): `create_session(&mut self, token_hash: &str, expires_at: &str) -> Result<()>`, `delete_session(&mut self, token_hash: &str) -> Result<()>`, `session_exists(&self, token_hash: &str) -> Result<bool>`, `get_setting`/`set_setting` (exist), `password_hash(&self) -> Result<Option<String>>`, `set_password_hash(&mut self, hash: &str) -> Result<()>`.
-  - `src/api/mod.rs`: router gains `POST /api/login`, `POST /api/logout`, `GET /api/session`, and a middleware applied to all `/api/*` routes that checks the `rssea_session` cookie.
+  - `src/api/mod.rs`: router gains `POST /api/login`, `POST /api/logout`, `GET /api/session`, and a middleware applied to all `/api/*` routes that checks the `feedea_session` cookie.
   - `AppState` gains `pub app_db: std::sync::Arc<tokio::sync::Mutex<app_db::AppDb>>`.
 
 - [ ] **Step 1: Add deps + AppDb accessors**
@@ -130,7 +130,7 @@ pub async fn ensure_password_setup(state: &AppState) -> anyhow::Result<()> {
         let hash = hash_password(&password)?;
         app_db.set_password_hash(&hash)?;
         eprintln!("========================================================");
-        eprintln!("rssea initial password: {password}");
+        eprintln!("feedea initial password: {password}");
         eprintln!("log in at /api/login (use the web UI) and change it in Settings");
         eprintln!("========================================================");
     }
@@ -155,7 +155,7 @@ use serde_json::{Value, json};
 use crate::auth;
 use crate::AppState;
 
-pub const SESSION_COOKIE: &str = "rssea_session";
+pub const SESSION_COOKIE: &str = "feedea_session";
 const SESSION_TTL_SECS: i64 = 30 * 24 * 3600;
 
 #[derive(Deserialize)]
@@ -267,7 +267,7 @@ pub struct AppState {
 
 - [ ] **Step 6: Write integration tests `tests/auth.rs`**
 
-Tests: (1) `GET /api/session` with no cookie → `{"authenticated": false, "setup_required": false}` after `ensure_password_setup` (which sets a password); (2) `POST /api/login` with wrong password → 401; (3) `POST /api/login` with correct password → 200 + sets `rssea_session` cookie; (4) `GET /api/feeds` WITHOUT cookie → 401; (5) `GET /api/feeds` WITH cookie → 200. Need a helper that captures the Set-Cookie from login and re-sends it. Use `reqwest` is NOT available for tests (it's a dependency but tests use tower oneshot); use `tower::ServiceExt` with `axum::http::header::COOKIE`.
+Tests: (1) `GET /api/session` with no cookie → `{"authenticated": false, "setup_required": false}` after `ensure_password_setup` (which sets a password); (2) `POST /api/login` with wrong password → 401; (3) `POST /api/login` with correct password → 200 + sets `feedea_session` cookie; (4) `GET /api/feeds` WITHOUT cookie → 401; (5) `GET /api/feeds` WITH cookie → 200. Need a helper that captures the Set-Cookie from login and re-sends it. Use `reqwest` is NOT available for tests (it's a dependency but tests use tower oneshot); use `tower::ServiceExt` with `axum::http::header::COOKIE`.
 
 For test (1), seed the app DB with a known password hash directly (call `hash_password("test-pass")` and `set_password_hash`) rather than relying on the random initial password.
 
@@ -322,7 +322,7 @@ mod tests {
     #[tokio::test]
     async fn search_and_counts_against_newsflash_db() {
         let server = crate::engine::tests::FeedServer::start(crate::engine::tests::RSS.to_string(), 10);
-        let dir = std::env::temp_dir().join(format!("rssea-queries-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("feedea-queries-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let config = Config { data_dir: dir.clone(), host: "127.0.0.1".into(), port: 0 };
         let engine = Engine::new(&config).await.unwrap();

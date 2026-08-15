@@ -1,11 +1,11 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use rssea::api;
-use rssea::app_db;
-use rssea::config::Config;
-use rssea::engine::Engine;
-use rssea::AppState;
+use feedea::api;
+use feedea::app_db;
+use feedea::config::Config;
+use feedea::engine::Engine;
+use feedea::AppState;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Mutex;
@@ -14,7 +14,7 @@ use tower::ServiceExt;
 async fn spawn_app() -> axum::Router {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
-        "rssea-static-test-{}-{}",
+        "feedea-static-test-{}-{}",
         std::process::id(),
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
@@ -46,7 +46,7 @@ async fn serves_index_html_at_root() {
 
 #[tokio::test]
 async fn serves_hashed_asset_with_content_type() {
-    let mut assets: Vec<String> = rssea::assets::Assets::iter().map(|p| p.to_string()).collect();
+    let mut assets: Vec<String> = feedea::assets::Assets::iter().map(|p| p.to_string()).collect();
     assets.sort();
     let asset = assets
         .iter()

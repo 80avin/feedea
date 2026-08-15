@@ -8,7 +8,7 @@ use serde_json::json;
 use crate::auth;
 use crate::AppState;
 
-pub const SESSION_COOKIE: &str = "rssea_session";
+pub const SESSION_COOKIE: &str = "feedea_session";
 const SESSION_TTL_SECS: i64 = 30 * 24 * 3600;
 
 #[derive(Deserialize)]

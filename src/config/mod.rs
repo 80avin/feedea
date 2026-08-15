@@ -2,15 +2,15 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "rssea", version, about = "Self-hosted feed aggregator")]
+#[command(name = "feedea", version, about = "Self-hosted feed aggregator")]
 pub struct Cli {
-    #[arg(long, env = "RSSEA_DATA_DIR")]
+    #[arg(long, env = "FEEDEA_DATA_DIR")]
     pub data_dir: Option<PathBuf>,
-    #[arg(long, env = "RSSEA_HOST", default_value = "0.0.0.0")]
+    #[arg(long, env = "FEEDEA_HOST", default_value = "0.0.0.0")]
     pub host: String,
-    #[arg(long, env = "RSSEA_PORT", default_value_t = 3000)]
+    #[arg(long, env = "FEEDEA_PORT", default_value_t = 3000)]
     pub port: u16,
-    #[arg(long, env = "RSSEA_ALLOW_PRIVATE_PROXY", default_value_t = false)]
+    #[arg(long, env = "FEEDEA_ALLOW_PRIVATE_PROXY", default_value_t = false)]
     pub allow_private_proxy: bool,
 }
 
@@ -44,7 +44,7 @@ impl Config {
 
 pub fn default_data_dir() -> PathBuf {
     match std::env::var("HOME") {
-        Ok(home) if !home.is_empty() => PathBuf::from(home).join(".local/share/rssea"),
+        Ok(home) if !home.is_empty() => PathBuf::from(home).join(".local/share/feedea"),
         _ => PathBuf::from("."),
     }
 }
@@ -58,30 +58,30 @@ mod tests {
         let home = std::env::var("HOME").expect("HOME set in test env");
         assert_eq!(
             default_data_dir(),
-            PathBuf::from(format!("{home}/.local/share/rssea"))
+            PathBuf::from(format!("{home}/.local/share/feedea"))
         );
     }
 
     #[test]
     fn data_file_joins_under_data_dir() {
         let cfg = Config {
-            data_dir: PathBuf::from("/tmp/rssea-test"),
+            data_dir: PathBuf::from("/tmp/feedea-test"),
             host: "127.0.0.1".into(),
             port: 3000,
             allow_private_proxy: false,
         };
-        assert_eq!(cfg.data_file("rssea.sqlite"), PathBuf::from("/tmp/rssea-test/rssea.sqlite"));
+        assert_eq!(cfg.data_file("feedea.sqlite"), PathBuf::from("/tmp/feedea-test/feedea.sqlite"));
     }
 
     #[test]
     fn cli_reads_allow_private_proxy_env() {
-        unsafe { std::env::set_var("RSSEA_ALLOW_PRIVATE_PROXY", "true") };
-        let cli = Cli::try_parse_from(["rssea"]).unwrap();
-        unsafe { std::env::remove_var("RSSEA_ALLOW_PRIVATE_PROXY") };
+        unsafe { std::env::set_var("FEEDEA_ALLOW_PRIVATE_PROXY", "true") };
+        let cli = Cli::try_parse_from(["feedea"]).unwrap();
+        unsafe { std::env::remove_var("FEEDEA_ALLOW_PRIVATE_PROXY") };
         assert!(cli.allow_private_proxy);
 
-        unsafe { std::env::remove_var("RSSEA_ALLOW_PRIVATE_PROXY") };
-        let cli = Cli::try_parse_from(["rssea"]).unwrap();
+        unsafe { std::env::remove_var("FEEDEA_ALLOW_PRIVATE_PROXY") };
+        let cli = Cli::try_parse_from(["feedea"]).unwrap();
         assert!(!cli.allow_private_proxy);
     }
 }

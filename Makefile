@@ -1,6 +1,6 @@
 .PHONY: dev build run test clean frontend-dev backend-dev
 
-DATA_DIR ?= $(HOME)/.local/share/rssea
+DATA_DIR ?= $(HOME)/.local/share/feedea
 BACKEND_PORT ?= 3000
 FRONTEND_PORT ?= 5173
 

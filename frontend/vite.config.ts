@@ -10,8 +10,8 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       manifest: {
-        name: "rssea",
-        short_name: "rssea",
+        name: "feedea",
+        short_name: "feedea",
         start_url: "/",
         display: "standalone",
         theme_color: "#09090b",

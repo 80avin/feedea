@@ -1,10 +1,10 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use rssea::app_db;
-use rssea::config::Config;
-use rssea::engine::Engine;
-use rssea::AppState;
+use feedea::app_db;
+use feedea::config::Config;
+use feedea::engine::Engine;
+use feedea::AppState;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -12,7 +12,7 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn health_returns_ok_with_version() {
-    let dir = PathBuf::from(format!("/tmp/rssea-health-test-{}", std::process::id()));
+    let dir = PathBuf::from(format!("/tmp/feedea-health-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let cfg = Config {
         data_dir: dir,
@@ -22,7 +22,7 @@ async fn health_returns_ok_with_version() {
     };
     let engine = Engine::new(&cfg).await.unwrap();
     let app_db = Arc::new(Mutex::new(app_db::open(&cfg.data_dir).unwrap()));
-    let app = rssea::api::router(AppState { engine, app_db, allow_private_proxy: false });
+    let app = feedea::api::router(AppState { engine, app_db, allow_private_proxy: false });
     let response = app
         .oneshot(
             Request::builder()

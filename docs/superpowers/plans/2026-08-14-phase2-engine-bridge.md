@@ -13,7 +13,7 @@
 - No comments in code unless a task explicitly shows them.
 - `reqwest` is 0.13 (news-flash's own Client type — do not change).
 - All synchronous news-flash calls (`get_*`, counts, `create()`) MUST run inside `spawn_blocking`. Async news-flash methods (`sync`, `add_feed`, `fetch_feed`, `get_article_thumbnail`) are network-bound; run them under the engine's mutation lock but may be awaited directly (documented design decision, not a defect).
-- news-flash engine data lives under `<data_dir>/engine/config` and `<data_dir>/engine/data`. Our sidecar (`rssea.sqlite`) stays at `<data_dir>/rssea.sqlite` (untouched this phase).
+- news-flash engine data lives under `<data_dir>/engine/config` and `<data_dir>/engine/data`. Our sidecar (`feedea.sqlite`) stays at `<data_dir>/feedea.sqlite` (untouched this phase).
 - `ArticleFilter.order` MUST be `Some(ArticleOrder::NewestFirst)` whenever you want deterministic date-desc ordering — news-flash applies NO ORDER BY when `order` is `None`.
 - DTOs are defined in `src/dto.rs`, shared by engine and API. Do not serialize news-flash model types directly.
 - Add `chrono = "0.4"` to Cargo.toml.
@@ -53,7 +53,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn tmp_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("rssea-engine-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("feedea-engine-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }
@@ -550,10 +550,10 @@ git add src/engine/mod.rs src/dto.rs && git commit -m "Phase 2: add engine read 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use rssea::api;
-use rssea::config::Config;
-use rssea::engine::Engine;
-use rssea::AppState;
+use feedea::api;
+use feedea::config::Config;
+use feedea::engine::Engine;
+use feedea::AppState;
 use std::path::PathBuf;
 use tower::ServiceExt;
 
@@ -578,7 +578,7 @@ mod feed_server;
 
 async fn spawn_app() -> (String, axum::Router) {
     let server = feed_server::FeedServer::start(RSS.to_string(), 10);
-    let dir = std::env::temp_dir().join(format!("rssea-api-test-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("feedea-api-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
     let engine = Engine::new(&config).await.unwrap();
@@ -827,7 +827,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     let engine = engine::Engine::new(&config).await?;
     let state = AppState { engine };
     let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port)).await?;
-    tracing::info!("rssea {} listening on {}", crate::version(), listener.local_addr()?);
+    tracing::info!("feedea {} listening on {}", crate::version(), listener.local_addr()?);
     axum::serve(listener, api::router(state)).await?;
     Ok(())
 }
@@ -905,7 +905,7 @@ mod tests {
             crate::engine::tests::RSS.to_string(),
             6,
         );
-        let dir = std::env::temp_dir().join(format!("rssea-sched-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("feedea-sched-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0 };
         let engine = Engine::new(&config).await.unwrap();
@@ -960,7 +960,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     tokio::spawn(engine::sync::scheduler_loop(engine.clone(), engine::sync::DEFAULT_SYNC_INTERVAL));
     let state = AppState { engine };
     let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port)).await?;
-    tracing::info!("rssea {} listening on {}", crate::version(), listener.local_addr()?);
+    tracing::info!("feedea {} listening on {}", crate::version(), listener.local_addr()?);
     axum::serve(listener, api::router(state)).await?;
     Ok(())
 }
@@ -969,7 +969,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `cargo test engine::sync::tests`
-Expected: PASS. Then `cargo test` full. Then smoke check: `cargo run -- --data-dir /tmp/rssea-phase2-smoke &` → `curl -s localhost:3000/api/health` → ok; kill.
+Expected: PASS. Then `cargo test` full. Then smoke check: `cargo run -- --data-dir /tmp/feedea-phase2-smoke &` → `curl -s localhost:3000/api/health` → ok; kill.
 
 - [ ] **Step 6: Commit**
 

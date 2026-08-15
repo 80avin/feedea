@@ -1,4 +1,4 @@
-# rssea
+# Feedea
 
 A self-hosted RSS feed aggregator with a built-in web UI.
 
@@ -29,14 +29,14 @@ export PATH="$HOME/.bun/bin:$PATH"
 
 ```sh
 make build        # builds frontend then cargo build --release
-./target/release/rssea --data-dir /path/to/data
+./target/release/feedea --data-dir /path/to/data
 ```
 
-On first run rssea prints a generated password to stderr. Log in at the web
+On first run feedea prints a generated password to stderr. Log in at the web
 UI and change it in Settings.
 
 Default data dir (when `--data-dir` is omitted):
-`$HOME/.local/share/rssea` (or `RSSEA_DATA_DIR`).
+`$HOME/.local/share/feedea` (or `FEEDEA_DATA_DIR`).
 
 ## Development
 
@@ -85,23 +85,23 @@ variable:
 
 | flag                      | env                         | default                     | description                        |
 | ------------------------- | --------------------------- | --------------------------- | ---------------------------------- |
-| `--data-dir`              | `RSSEA_DATA_DIR`            | `~/.local/share/rssea`      | data directory                     |
-| `--host`                  | `RSSEA_HOST`                | `0.0.0.0`                   | listen address                     |
-| `--port`                  | `RSSEA_PORT`                | `3000`                      | listen port                        |
-| `--allow-private-proxy`   | `RSSEA_ALLOW_PRIVATE_PROXY` | `false`                     | allow proxying images from private networks |
+| `--data-dir`              | `FEEDEA_DATA_DIR`            | `~/.local/share/feedea`      | data directory                     |
+| `--host`                  | `FEEDEA_HOST`                | `0.0.0.0`                   | listen address                     |
+| `--port`                  | `FEEDEA_PORT`                | `3000`                      | listen port                        |
+| `--allow-private-proxy`   | `FEEDEA_ALLOW_PRIVATE_PROXY` | `false`                     | allow proxying images from private networks |
 
 Example:
 
 ```sh
-RSSEA_PORT=8080 RSSEA_ALLOW_PRIVATE_PROXY=1 ./target/release/rssea
+FEEDEA_PORT=8080 FEEDEA_ALLOW_PRIVATE_PROXY=1 ./target/release/feedea
 ```
 
 ### Data directory layout
 
 ```
 <data_dir>/
-  rssea.sqlite              # rssea settings, sessions
-  rssea.sqlite-wal, -shm    # SQLite WAL files
+  feedea.sqlite              # feedea settings, sessions
+  feedea.sqlite-wal, -shm    # SQLite WAL files
   engine/
     config/                 # news-flash config
     data/
@@ -117,7 +117,7 @@ deployment notes, and troubleshooting.
 
 ## License
 
-rssea links against [news-flash](https://crates.io/crates/news-flash), which
+feedea links against [news-flash](https://crates.io/crates/news-flash), which
 is licensed GPL-3.0-or-later. The combined binary is therefore distributed
 under GPL-3.0-or-later — provide the corresponding source if you distribute
 the binary. See `Cargo.lock` for the full dependency tree and licenses.

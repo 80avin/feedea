@@ -1,4 +1,4 @@
-# rssea — Feed Aggregator (PWA + Rust backend)
+# feedea — Feed Aggregator (PWA + Rust backend)
 
 Date: 2026-08-14
 Status: Approved design
@@ -29,10 +29,10 @@ built with React + HeroUI, managed by bun.
 
 - **Self-hosted server, single user.** Runs on an always-on box (NAS, VPS, Raspberry Pi).
 - **Single password login.** First-run generates a random setup token printed to logs
-  (or set via env `RSSEA_PASSWORD`). Browser POSTs password, receives an HttpOnly
+  (or set via env `FEEDEA_PASSWORD`). Browser POSTs password, receives an HttpOnly
   session cookie. All `/api/*` (except login/session) requires the session.
 - Password stored as argon2 hash in our app DB.
-- Data dir default `~/.local/share/rssea`, overridable via CLI/env.
+- Data dir default `~/.local/share/feedea`, overridable via CLI/env.
 
 ## 3. Architecture (Approach A: news-flash engine + custom sidecar)
 
@@ -41,7 +41,7 @@ Two SQLite databases, linked by news-flash string IDs (`feed_id`, `article_id`,
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  rssea  (single Rust binary: axum server)                    │
+│  feedea  (single Rust binary: axum server)                    │
 │                                                              │
 │  ┌───────────┐  ┌────────────────────────────────────────┐   │
 │  │  REST API │  │  Sync engine (wraps news-flash)        │   │

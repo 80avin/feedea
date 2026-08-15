@@ -6,14 +6,14 @@
     <meta name="theme-color" content="#09090b" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>rssea</title>
+    <title>feedea</title>
     <script>
       (function () {
         try {
-          var theme = localStorage.getItem("rssea.theme") || "dark";
+          var theme = localStorage.getItem("feedea.theme") || "dark";
           var dark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", dark);
-          document.documentElement.setAttribute("data-accent", localStorage.getItem("rssea.accent") || "blue");
+          document.documentElement.setAttribute("data-accent", localStorage.getItem("feedea.accent") || "blue");
         } catch (e) {}
       })();
     </script>

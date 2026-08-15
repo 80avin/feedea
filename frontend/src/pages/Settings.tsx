@@ -6,8 +6,8 @@ import { useChangePassword, useSettings, useUpdateSettings } from "../state/hook
 import { ErrorState, LoadingState, formatError } from "../components/Feedback";
 import { ACCENTS } from "../theme/useTheme";
 
-const REPO_URL = "https://github.com/yourname/rssea";
-const ISSUES_URL = "https://github.com/yourname/rssea/issues";
+const REPO_URL = "https://github.com/yourname/feedea";
+const ISSUES_URL = "https://github.com/yourname/feedea/issues";
 
 const inputClass =
   "rounded-md border border-app-border-strong bg-app-surface px-3 py-2 text-sm text-app-text outline-none focus:border-accent";
@@ -244,7 +244,7 @@ export default function Settings() {
           <section className="flex flex-col gap-3 rounded-lg border border-app-border p-4">
             <h3 className="text-sm font-semibold">About</h3>
             <p className="text-sm text-app-text-muted">
-              rssea is a self-hosted RSS feed aggregator. The repository is not published
+              feedea is a self-hosted RSS feed aggregator. The repository is not published
               yet; the links below will be updated once it goes public.
             </p>
             <div className="flex flex-wrap gap-2">

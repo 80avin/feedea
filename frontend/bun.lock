@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "rssea-frontend",
+      "name": "feedea-frontend",
       "dependencies": {
         "@heroicons/react": "2.2.0",
         "@heroui/react": "3.2.4",

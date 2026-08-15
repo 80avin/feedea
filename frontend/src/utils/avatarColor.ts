@@ -1,4 +1,4 @@
-const STORAGE_KEY = "rssea.avatar-colors";
+const STORAGE_KEY = "feedea.avatar-colors";
 
 export const AVATAR_COLORS: string[] = [
   "oklch(0.546 0.245 262.881)",

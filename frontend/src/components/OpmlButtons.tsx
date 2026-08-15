@@ -30,7 +30,7 @@ export default function OpmlButtons() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "rssea-subscriptions.opml";
+      link.download = "feedea-subscriptions.opml";
       document.body.appendChild(link);
       link.click();
       link.remove();

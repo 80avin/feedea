@@ -11,9 +11,9 @@
 ## Global Constraints
 
 - Backend is async axum; all news-flash and CPU-heavy work must eventually run via `spawn_blocking` (not needed yet in this phase).
-- Two SQLite DBs: news-flash's (`data/database.sqlite`, owned by engine) and our sidecar (`data/rssea.sqlite`, owned by app_db). Linked by news-flash string IDs.
+- Two SQLite DBs: news-flash's (`data/database.sqlite`, owned by engine) and our sidecar (`data/feedea.sqlite`, owned by app_db). Linked by news-flash string IDs.
 - `reqwest` must be version 0.13 (news-flash's own Client type; 0.12 will not compile against `nf.sync`/`nf.add_feed`).
-- Default data dir: `~/.local/share/rssea`, overridable via CLI/env.
+- Default data dir: `~/.local/share/feedea`, overridable via CLI/env.
 - No comments in code unless the task explicitly shows them.
 - Keep module structure per spec §9 (paths below).
 - Commit after each task with the exact message given.
@@ -29,13 +29,13 @@
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: binary target `rssea`; lib crate `rssea` with modules `config`, `app_db`, `api`, `engine`, `auth` (public); `src/main.rs` calls `rssea::run()`.
+- Produces: binary target `feedea`; lib crate `feedea` with modules `config`, `app_db`, `api`, `engine`, `auth` (public); `src/main.rs` calls `feedea::run()`.
 
 - [ ] **Step 1: Rewrite `Cargo.toml`**
 
 ```toml
 [package]
-name = "rssea"
+name = "feedea"
 version = "0.1.0"
 edition = "2024"
 
@@ -103,7 +103,7 @@ Create empty module files so the lib compiles:
 
 ```rust
 fn main() {
-    println!("rssea {}", rssea::version());
+    println!("feedea {}", feedea::version());
 }
 ```
 
@@ -130,9 +130,9 @@ git add -A && git commit -m "Phase 1: restructure to binary crate with module sk
 - Consumes: `clap::Parser`.
 - Produces:
   - `pub struct Config { pub data_dir: PathBuf, pub host: String, pub port: u16 }`
-  - `impl Config { pub fn parse() -> Self }` (from clap, reading `--data-dir`, `--host`, `--port`; env defaults `RSSEA_DATA_DIR`, `RSSEA_HOST`, `RSSEA_PORT` via clap's `env` feature)
+  - `impl Config { pub fn parse() -> Self }` (from clap, reading `--data-dir`, `--host`, `--port`; env defaults `FEEDEA_DATA_DIR`, `FEEDEA_HOST`, `FEEDEA_PORT` via clap's `env` feature)
   - `impl Config { pub fn data_file(&self, name: &str) -> PathBuf }` → `data_dir.join(name)`
-  - `pub fn default_data_dir() -> PathBuf` → `~/.local/share/rssea` on Linux (use `dirs`-free approach: `std::env::var("HOME")`), falling back to `.` if unset.
+  - `pub fn default_data_dir() -> PathBuf` → `~/.local/share/feedea` on Linux (use `dirs`-free approach: `std::env::var("HOME")`), falling back to `.` if unset.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -146,18 +146,18 @@ mod tests {
         let home = std::env::var("HOME").expect("HOME set in test env");
         assert_eq!(
             default_data_dir(),
-            PathBuf::from(format!("{home}/.local/share/rssea"))
+            PathBuf::from(format!("{home}/.local/share/feedea"))
         );
     }
 
     #[test]
     fn data_file_joins_under_data_dir() {
         let cfg = Config {
-            data_dir: PathBuf::from("/tmp/rssea-test"),
+            data_dir: PathBuf::from("/tmp/feedea-test"),
             host: "127.0.0.1".into(),
             port: 3000,
         };
-        assert_eq!(cfg.data_file("rssea.sqlite"), PathBuf::from("/tmp/rssea-test/rssea.sqlite"));
+        assert_eq!(cfg.data_file("feedea.sqlite"), PathBuf::from("/tmp/feedea-test/feedea.sqlite"));
     }
 }
 ```
@@ -174,13 +174,13 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "rssea", version, about = "Self-hosted feed aggregator")]
+#[command(name = "feedea", version, about = "Self-hosted feed aggregator")]
 pub struct Cli {
-    #[arg(long, env = "RSSEA_DATA_DIR")]
+    #[arg(long, env = "FEEDEA_DATA_DIR")]
     pub data_dir: Option<PathBuf>,
-    #[arg(long, env = "RSSEA_HOST", default_value = "0.0.0.0")]
+    #[arg(long, env = "FEEDEA_HOST", default_value = "0.0.0.0")]
     pub host: String,
-    #[arg(long, env = "RSSEA_PORT", default_value_t = 3000)]
+    #[arg(long, env = "FEEDEA_PORT", default_value_t = 3000)]
     pub port: u16,
 }
 
@@ -212,7 +212,7 @@ impl Config {
 
 pub fn default_data_dir() -> PathBuf {
     match std::env::var("HOME") {
-        Ok(home) if !home.is_empty() => PathBuf::from(home).join(".local/share/rssea"),
+        Ok(home) if !home.is_empty() => PathBuf::from(home).join(".local/share/feedea"),
         _ => PathBuf::from("."),
     }
 }
@@ -242,7 +242,7 @@ git add src/config/mod.rs && git commit -m "Phase 1: add config module with CLI/
 - Consumes: `Config` (for data dir), rusqlite.
 - Produces:
   - `pub struct AppDb { pub conn: rusqlite::Connection }`
-  - `pub fn open(data_dir: &Path) -> anyhow::Result<AppDb>` (anyhow not in deps yet — use `Box<dyn std::error::Error>` or add `anyhow = "1"`. Prefer adding anyhow to Cargo.toml; it's standard.) Creates `rssea.sqlite` with WAL + FK on, runs `schema.sql`.
+  - `pub fn open(data_dir: &Path) -> anyhow::Result<AppDb>` (anyhow not in deps yet — use `Box<dyn std::error::Error>` or add `anyhow = "1"`. Prefer adding anyhow to Cargo.toml; it's standard.) Creates `feedea.sqlite` with WAL + FK on, runs `schema.sql`.
   - Schema tables (per spec §3.2): `saved`, `saved_tags`, `tags`, `sessions`, `settings`.
   - `impl AppDb { pub fn set_setting(&mut self, key: &str, value: &str) -> Result<()> }`
   - `impl AppDb { pub fn get_setting(&self, key: &str) -> Result<Option<String>> }`
@@ -260,7 +260,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn tmp_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("rssea-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("feedea-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -347,7 +347,7 @@ pub struct AppDb {
 impl AppDb {
     pub fn open(data_dir: &Path) -> anyhow::Result<AppDb> {
         std::fs::create_dir_all(data_dir)?;
-        let path = data_dir.join("rssea.sqlite");
+        let path = data_dir.join("feedea.sqlite");
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
@@ -413,18 +413,18 @@ Create `tests/health.rs`:
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use rssea::config::Config;
+use feedea::config::Config;
 use std::path::PathBuf;
 use tower::ServiceExt;
 
 #[tokio::test]
 async fn health_returns_ok_with_version() {
     let cfg = Config {
-        data_dir: PathBuf::from("/tmp/rssea-health-test"),
+        data_dir: PathBuf::from("/tmp/feedea-health-test"),
         host: "127.0.0.1".into(),
         port: 3000,
     };
-    let app = rssea::api::router(cfg);
+    let app = feedea::api::router(cfg);
     let response = app
         .oneshot(
             Request::builder()
@@ -445,7 +445,7 @@ async fn health_returns_ok_with_version() {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cargo test --test health`
-Expected: FAIL — `rssea::api::router` doesn't exist / doesn't take Config.
+Expected: FAIL — `feedea::api::router` doesn't exist / doesn't take Config.
 
 - [ ] **Step 3: Implement api/health.rs and api/mod.rs**
 
@@ -482,7 +482,7 @@ pub fn router(_config: Config) -> axum::Router {
 pub async fn run(config: Config) -> anyhow::Result<()> {
     config.ensure_data_dir()?;
     let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port)).await?;
-    tracing::info!("rssea {} listening on {}", crate::version(), listener.local_addr()?);
+    tracing::info!("feedea {} listening on {}", crate::version(), listener.local_addr()?);
     let app = api::router(config);
     axum::serve(listener, app).await?;
     Ok(())
@@ -492,19 +492,19 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
 - [ ] **Step 5: Wire main.rs**
 
 ```rust
-use rssea::config::Config;
+use feedea::config::Config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "rssea=info,tower_http=info".into()),
+                .unwrap_or_else(|_| "feedea=info,tower_http=info".into()),
         )
         .init();
 
     let config = Config::parse();
-    rssea::run(config).await
+    feedea::run(config).await
 }
 ```
 
@@ -517,7 +517,7 @@ Expected: PASS. Also `cargo build` clean.
 
 - [ ] **Step 7: Manual smoke check**
 
-Run: `cargo run -- --data-dir /tmp/rssea-smoke &` then `curl -s localhost:3000/api/health`; expect `{"status":"ok","version":"0.1.0"}`; kill the process.
+Run: `cargo run -- --data-dir /tmp/feedea-smoke &` then `curl -s localhost:3000/api/health`; expect `{"status":"ok","version":"0.1.0"}`; kill the process.
 
 - [ ] **Step 8: Commit**
 
@@ -543,7 +543,7 @@ git add src/lib.rs src/main.rs src/api/ tests/ && git commit -m "Phase 1: add ax
 ```makefile
 .PHONY: dev build run test clean frontend-dev frontend-build
 
-DATA_DIR ?= $(HOME)/.local/share/rssea
+DATA_DIR ?= $(HOME)/.local/share/feedea
 BACKEND_PORT ?= 3000
 FRONTEND_PORT ?= 5173
 

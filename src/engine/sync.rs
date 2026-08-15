@@ -51,7 +51,7 @@ mod tests {
         );
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "rssea-sched-test-{}-{}",
+            "feedea-sched-test-{}-{}",
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed)
         ));

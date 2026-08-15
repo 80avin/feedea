@@ -6,7 +6,7 @@ temporary data directory, without needing the public internet.
 ## Run
 
 ```sh
-make build          # or ensure target/release/rssea exists
+make build          # or ensure target/release/feedea exists
 bash scripts/smoke.sh
 ```
 
@@ -16,12 +16,12 @@ line as it is verified.
 
 ## What it verifies
 
-1. **Startup + health** — starts `target/release/rssea` with an empty temp
+1. **Startup + health** — starts `target/release/feedea` with an empty temp
    data dir, waits for `/api/health` (200, `{"status":"ok"}`).
-2. **First-run password** — parses `rssea initial password: <token>` from the
+2. **First-run password** — parses `feedea initial password: <token>` from the
    server's stderr log.
 3. **Session + login** — `/api/session` reports not authenticated before login;
-   `POST /api/login` with the printed password returns a `rssea_session` cookie
+   `POST /api/login` with the printed password returns a `feedea_session` cookie
    and `/api/session` reports authenticated afterwards.
 4. **Add a feed** — serves a local RSS fixture over `python3 -m http.server`
    on 127.0.0.1, adds it via `POST /api/sources`, then triggers

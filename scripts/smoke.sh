@@ -4,7 +4,7 @@ set -euo pipefail
 export PATH="$HOME/.bun/bin:$PATH"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN="$ROOT/target/release/rssea"
+BIN="$ROOT/target/release/feedea"
 
 if [[ ! -x "$BIN" ]]; then
   echo "release binary not found; running make build"
@@ -77,7 +77,7 @@ echo "waiting for $BASE/api/health"
 for _ in $(seq 1 60); do
   if curl -sf -o /dev/null "$BASE/api/health"; then break; fi
   if ! kill -0 "$APP_PID" 2>/dev/null; then
-    echo "FAIL: rssea exited during startup"
+    echo "FAIL: feedea exited during startup"
     cat "$TMP/server.log" 2>/dev/null || true
     exit 1
   fi
@@ -121,7 +121,7 @@ check "health endpoint returns 200" 200 GET /api/health
 assert_json "$TMP/last_body" 'd["status"] == "ok"'
 
 echo "== first-run password =="
-PASSWORD="$(grep -o 'rssea initial password: [0-9a-f]*' "$TMP/server.log" | awk '{print $NF}' | tail -1)"
+PASSWORD="$(grep -o 'feedea initial password: [0-9a-f]*' "$TMP/server.log" | awk '{print $NF}' | tail -1)"
 if [[ -z "$PASSWORD" ]]; then
   echo "FAIL: no initial password in server log"
   cat "$TMP/server.log" 2>/dev/null || true
@@ -137,7 +137,7 @@ echo "== login =="
 check "login with initial password" 200 POST /api/login \
   -H 'Content-Type: application/json' --data "{\"password\":\"$PASSWORD\"}"
 COOKIE="$(grep -i '^set-cookie:' "$TMP/last_headers" | head -1 | sed 's/^[Ss]et-[Cc]ookie: //' | cut -d';' -f1)"
-if [[ -z "$COOKIE" || "$COOKIE" != rssea_session=* ]]; then
+if [[ -z "$COOKIE" || "$COOKIE" != feedea_session=* ]]; then
   echo "FAIL: no session cookie from login"
   exit 1
 fi

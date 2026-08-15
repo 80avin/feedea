@@ -32,8 +32,8 @@ export function useSession() {
         navigate("/login", { replace: true });
       }
     };
-    window.addEventListener("rssea:unauthorized", onUnauthorized);
-    return () => window.removeEventListener("rssea:unauthorized", onUnauthorized);
+    window.addEventListener("feedea:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("feedea:unauthorized", onUnauthorized);
   }, [location.pathname, navigate, queryClient]);
 
   const refresh = useCallback(async () => {

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship rssea as a single self-contained executable. The built frontend (`frontend/dist`) is embedded into the Rust binary via `rust-embed`, served at `/` with an SPA fallback so deep links work, alongside the existing `/api/*` and `/img`. PWA icons added. Build/run/test Makefile targets made real. README + systemd notes. End-to-end smoke test of the built binary.
+**Goal:** Ship feedea as a single self-contained executable. The built frontend (`frontend/dist`) is embedded into the Rust binary via `rust-embed`, served at `/` with an SPA fallback so deep links work, alongside the existing `/api/*` and `/img`. PWA icons added. Build/run/test Makefile targets made real. README + systemd notes. End-to-end smoke test of the built binary.
 
 **Architecture:** The Rust axum server gains a static-assets handler backed by `rust-embed` (folder `frontend/dist`, built by bun before `cargo build`). The router serves: `/api/*`, `/img`, and `/img`-adjacent, plus static files at `/` — with an SPA fallback (any non-API, non-/img GET that doesn't match a static file → serve `index.html` so `/feeds/:id` deep links work). `make build` runs `bun run build` then `cargo build --release`. A `--data-dir` + port are the only runtime config. README documents dev (two-process) vs prod (single binary), systemd unit, and first-run password.
 
@@ -71,7 +71,7 @@ git add frontend/vite.config.ts frontend/public && git commit -m "Phase 6: add P
 
 **Files:**
 - Modify: `Makefile` (build order: bun then cargo; run; test incl. frontend; clean; data dir), `.gitignore` (keep frontend/dist ignored — the embed is at compile time, not committed)
-- Create: `README.md`, `docs/selfhosting.md` (or fold into README): dev flow (two terminals), prod flow (single binary), first-run password, systemd unit example, data dir layout, config env vars (`RSSEA_DATA_DIR`, `RSSEA_HOST`, `RSSEA_PORT`, `RSSEA_ALLOW_PRIVATE_PROXY`), troubleshooting.
+- Create: `README.md`, `docs/selfhosting.md` (or fold into README): dev flow (two terminals), prod flow (single binary), first-run password, systemd unit example, data dir layout, config env vars (`FEEDEA_DATA_DIR`, `FEEDEA_HOST`, `FEEDEA_PORT`, `FEEDEA_ALLOW_PRIVATE_PROXY`), troubleshooting.
 
 **Interfaces:**
 - Consumes: the Phase 6 binary.
@@ -79,7 +79,7 @@ git add frontend/vite.config.ts frontend/public && git commit -m "Phase 6: add P
 
 - [ ] **Step 1: Rewrite the Makefile** — verify the Phase 1 Makefile's current targets (dev/build/run/test/clean/install-watch) and make them correct for the embedded build. `make dev` should run backend (cargo run) + frontend (bun run dev) concurrently — use a simple `&`/`wait` or a small script. `make build` = `cd frontend && bun run build && cd .. && cargo build --release`. Keep the frontend-presence guard in `make test`.
 - [ ] **Step 2: Write README.md + docs** (dev/prod, first-run, env, systemd, troubleshooting). Include the GPL-3.0 note (news-flash is GPL-3.0-or-later) so distribution is done right.
-- [ ] **Step 3: Verify** — `make build` produces `target/release/rssea`; run it, curl `/` (200, html), `/api/health`, `/feeds/anything` (200, SPA fallback); `make test` passes.
+- [ ] **Step 3: Verify** — `make build` produces `target/release/feedea`; run it, curl `/` (200, html), `/api/health`, `/feeds/anything` (200, SPA fallback); `make test` passes.
 - [ ] **Step 4: Commit**
 
 ```bash

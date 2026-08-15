@@ -12,8 +12,8 @@ export const ACCENTS: { id: AccentName; label: string }[] = [
   { id: "violet", label: "Violet" },
 ];
 
-const THEME_KEY = "rssea.theme";
-const ACCENT_KEY = "rssea.accent";
+const THEME_KEY = "feedea.theme";
+const ACCENT_KEY = "feedea.accent";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 const DARK_COLOR = "#09090b";
 const LIGHT_COLOR = "#f4f4f5";

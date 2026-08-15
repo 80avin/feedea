@@ -1,11 +1,11 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use rssea::api;
-use rssea::app_db;
-use rssea::config::Config;
-use rssea::engine::Engine;
-use rssea::AppState;
+use feedea::api;
+use feedea::app_db;
+use feedea::config::Config;
+use feedea::engine::Engine;
+use feedea::AppState;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -125,7 +125,7 @@ fn url_encode(s: &str) -> String {
 async fn spawn_app(allow_private_proxy: bool) -> axum::Router {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
-        "rssea-proxy-test-{}-{}",
+        "feedea-proxy-test-{}-{}",
         std::process::id(),
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));

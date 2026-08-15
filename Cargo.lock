@@ -1373,6 +1373,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "feedea"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "axum",
+ "chrono",
+ "clap",
+ "diesel",
+ "html5ever",
+ "http-body-util",
+ "mime_guess",
+ "news-flash",
+ "percent-encoding",
+ "rand 0.10.2",
+ "reqwest",
+ "rusqlite",
+ "rust-embed",
+ "scraper",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "feedly_api"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3693,36 +3723,6 @@ checksum = "c51c9ae4df8a7fba42103df5c621fa3c37eccf3a3c650879e90fc48b11cc192c"
 dependencies = [
  "hashbrown 0.16.1",
  "thiserror 2.0.20",
-]
-
-[[package]]
-name = "rssea"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "argon2",
- "axum",
- "chrono",
- "clap",
- "diesel",
- "html5ever",
- "http-body-util",
- "mime_guess",
- "news-flash",
- "percent-encoding",
- "rand 0.10.2",
- "reqwest",
- "rusqlite",
- "rust-embed",
- "scraper",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
- "url",
 ]
 
 [[package]]

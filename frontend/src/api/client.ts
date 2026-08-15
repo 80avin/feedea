@@ -34,7 +34,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     message = res.statusText;
   }
   if (res.status === 401 && !AUTH_EXEMPT.has(path)) {
-    window.dispatchEvent(new Event("rssea:unauthorized"));
+    window.dispatchEvent(new Event("feedea:unauthorized"));
   }
   throw new ApiError(res.status, code, message);
 }
@@ -58,7 +58,7 @@ export async function apiGetText(path: string): Promise<string> {
     message = res.statusText;
   }
   if (res.status === 401 && !AUTH_EXEMPT.has(path)) {
-    window.dispatchEvent(new Event("rssea:unauthorized"));
+    window.dispatchEvent(new Event("feedea:unauthorized"));
   }
   throw new ApiError(res.status, code, message);
 }

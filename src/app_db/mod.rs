@@ -8,7 +8,7 @@ pub struct AppDb {
 
 pub fn open(data_dir: &Path) -> anyhow::Result<AppDb> {
     std::fs::create_dir_all(data_dir)?;
-    let path = data_dir.join("rssea.sqlite");
+    let path = data_dir.join("feedea.sqlite");
     let conn = Connection::open(path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
@@ -157,7 +157,7 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "rssea-test-{}-{}",
+            "feedea-test-{}-{}",
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed)
         ));

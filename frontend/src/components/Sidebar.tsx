@@ -155,7 +155,7 @@ export default function Sidebar() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-b border-app-border px-4 py-3 text-lg font-bold tracking-tight">rssea</div>
+      <div className="border-b border-app-border px-4 py-3 text-lg font-bold tracking-tight">feedea</div>
 
       <nav className="flex flex-col gap-1 p-2">
         <NavItem to="/" label="Overview" icon={Squares2X2Icon} end />
