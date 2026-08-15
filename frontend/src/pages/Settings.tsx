@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react";
-import { Button } from "@heroui/react";
+import { Button, Radio, RadioGroup } from "@heroui/react";
 import { ArrowRightStartOnRectangleIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { useSession } from "../auth/useSession";
 import { useChangePassword, useSettings, useUpdateSettings } from "../state/hooks";
 import { ErrorState, LoadingState, formatError } from "../components/Feedback";
 import { ACCENTS } from "../theme/useTheme";
+import { ComputerDesktopIcon, MoonIcon, SunIcon } from "@heroicons/react/24/solid";
 
 const REPO_URL = "https://github.com/80avin/feedea";
 const ISSUES_URL = "https://github.com/80avin/feedea/issues";
 
 const inputClass =
-  "rounded-md border border-app-border-strong bg-app-surface px-3 py-2 text-sm text-app-text outline-none focus:border-accent";
-const selectClass =
   "rounded-md border border-app-border-strong bg-app-surface px-3 py-2 text-sm text-app-text outline-none focus:border-accent";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -30,7 +29,7 @@ export default function Settings() {
   const updateSettings = useUpdateSettings();
   const changePassword = useChangePassword();
 
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState("system");
   const [accent, setAccent] = useState("blue");
   const [syncInterval, setSyncInterval] = useState("30");
   const [keepDays, setKeepDays] = useState("");
@@ -46,7 +45,7 @@ export default function Settings() {
 
   useEffect(() => {
     if (data && !dirty) {
-      setTheme(data.theme ?? "dark");
+      setTheme(data.theme ?? "system");
       setAccent(data.accent ?? "blue");
       setSyncInterval(String(data.sync_interval_minutes));
       setKeepDays(data.keep_articles_days === null ? "" : String(data.keep_articles_days));
@@ -55,7 +54,7 @@ export default function Settings() {
 
   const savePreferences = async () => {
     const patch: { theme?: string; accent?: string; sync_interval_minutes?: number; keep_articles_days?: number | null } = {};
-    if (theme !== (data?.theme ?? "dark")) {
+    if (theme !== (data?.theme ?? "system")) {
       patch.theme = theme;
     }
     if (accent !== (data?.accent ?? "blue")) {
@@ -121,34 +120,50 @@ export default function Settings() {
           <section className="flex flex-col gap-4 rounded-lg border border-app-border p-4">
             <h3 className="text-sm font-semibold">Preferences</h3>
             <Field label="Theme">
-              <select
-                value={theme}
-                onChange={(e) => {
-                  setTheme(e.target.value);
-                  markDirty();
-                }}
-                className={selectClass}
-              >
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-                <option value="system">System</option>
-              </select>
+              <RadioGroup className="flex-row gap-2" value={theme}>
+                {(
+                  [
+                    ["dark", MoonIcon],
+                    ["light", SunIcon],
+                    ["system", ComputerDesktopIcon],
+                  ] as const
+                ).map(([id, IconEl]) => (
+                  <Radio key={id} value={id}>
+                    <Radio.Content>
+                      <Button
+                        variant={theme === id ? "primary" : "outline"}
+                        isIconOnly
+                          onClick={() => {updateSettings.mutateAsync({theme: id})}}
+                      >
+                        <IconEl />
+                      </Button>
+                    </Radio.Content>
+                  </Radio>
+                ))}
+              </RadioGroup>
             </Field>
             <Field label="Accent color" hint="Used for buttons, active navigation and focus.">
-              <select
-                value={accent}
-                onChange={(e) => {
-                  setAccent(e.target.value);
-                  markDirty();
-                }}
-                className={selectClass}
-              >
-                {ACCENTS.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.label}
-                  </option>
+              <RadioGroup className="flex-row gap-2" value={accent}>
+                {ACCENTS.map((ac) => (
+                  <Radio key={ac.id} value={ac.id}>
+                    {(e) => (
+                      <Button
+                        variant="tertiary"
+                        isIconOnly
+                        style={{
+                          backgroundColor: ac.color,
+                          outline: e.isSelected
+                            ? "1px solid var(--accent-soft)"
+                            : undefined,
+                        }}
+                        onClick={() => {
+                          updateSettings.mutateAsync({ accent: ac.id });
+                        }}
+                      />
+                    )}
+                  </Radio>
                 ))}
-              </select>
+              </RadioGroup>
             </Field>
             <Field label="Sync interval (minutes)" hint="How often feeds are refreshed.">
               <input

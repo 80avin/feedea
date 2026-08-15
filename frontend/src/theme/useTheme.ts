@@ -5,12 +5,12 @@ import { useSettings } from "../state/hooks";
 export type ThemeMode = "light" | "dark" | "system";
 export type AccentName = "blue" | "zinc" | "emerald" | "violet";
 
-export const ACCENTS: { id: AccentName; label: string }[] = [
-  { id: "blue", label: "Blue (default)" },
-  { id: "zinc", label: "Zinc" },
-  { id: "emerald", label: "Emerald" },
-  { id: "violet", label: "Violet" },
-];
+export const ACCENTS = [
+  { id: "blue", label: "Blue (default)", color: 'oklch(0.6204 0.195 253.83)' },
+  { id: "zinc", label: "Zinc", color: 'oklch(0.442 0.017 285.79)' },
+  { id: "emerald", label: "Emerald", color: 'oklch(0.596 0.145 163.225)' },
+  { id: "violet", label: "Violet", color: 'oklch(0.541 0.281 293.009)' },
+] as const;
 
 const THEME_KEY = "feedea.theme";
 const ACCENT_KEY = "feedea.accent";
