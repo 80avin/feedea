@@ -1,10 +1,10 @@
-use axum::extract::State;
 use axum::Json;
+use axum::extract::State;
 use serde_json::{Value, json};
 
+use crate::AppState;
 use crate::api::error::ApiResult;
 use crate::dto::CategoryCard;
-use crate::AppState;
 use news_flash::models::{ArticleFilter, ArticleOrder, CategoryID, OrderBy};
 
 pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
@@ -17,11 +17,29 @@ pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
     let mut cards = Vec::new();
     for cat in categories {
         seen.insert(cat.category_id.as_str().to_string());
-        cards.push(build_card(&state, &cat.category_id, cat.label, &totals, &category_unread).await?);
+        cards.push(
+            build_card(
+                &state,
+                &cat.category_id,
+                cat.label,
+                &totals,
+                &category_unread,
+            )
+            .await?,
+        );
     }
     for t in &totals {
         if seen.insert(t.category_id.clone()) {
-            cards.push(build_card(&state, &CategoryID::new(&t.category_id), t.category_id.clone(), &totals, &category_unread).await?);
+            cards.push(
+                build_card(
+                    &state,
+                    &CategoryID::new(&t.category_id),
+                    t.category_id.clone(),
+                    &totals,
+                    &category_unread,
+                )
+                .await?,
+            );
         }
     }
 
@@ -52,8 +70,15 @@ async fn build_card(
     Ok(CategoryCard {
         category_id: category_id.as_str().to_string(),
         name,
-        total_count: totals.iter().find(|t| t.category_id == category_id.as_str()).map(|t| t.total).unwrap_or(0),
-        unread_count: category_unread.get(category_id.as_str()).copied().unwrap_or(0),
+        total_count: totals
+            .iter()
+            .find(|t| t.category_id == category_id.as_str())
+            .map(|t| t.total)
+            .unwrap_or(0),
+        unread_count: category_unread
+            .get(category_id.as_str())
+            .copied()
+            .unwrap_or(0),
         items,
     })
 }

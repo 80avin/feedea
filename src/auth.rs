@@ -1,5 +1,5 @@
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand::RngExt;
 
 use crate::AppState;
@@ -16,7 +16,9 @@ pub fn hash_password(password: &str) -> anyhow::Result<String> {
 }
 
 pub fn verify_password(password: &str, hash: &str) -> bool {
-    let Ok(parsed) = PasswordHash::new(hash) else { return false };
+    let Ok(parsed) = PasswordHash::new(hash) else {
+        return false;
+    };
     Argon2::default()
         .verify_password(password.as_bytes(), &parsed)
         .is_ok()
@@ -32,7 +34,11 @@ pub fn sha256_hex(s: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(s.as_bytes());
-    hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 pub async fn ensure_password_setup(state: &AppState) -> anyhow::Result<()> {
@@ -94,17 +100,29 @@ mod tests {
             sha256_hex("abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
-        assert_eq!(sha256_hex(""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        assert_eq!(
+            sha256_hex(""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
     }
 
     #[tokio::test]
     async fn ensure_password_setup_is_idempotent() {
         let dir = std::env::temp_dir().join(format!("feedea-auth-unit-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let config = Config { data_dir: dir.clone(), host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
+        let config = Config {
+            data_dir: dir.clone(),
+            host: "127.0.0.1".into(),
+            port: 0,
+            allow_private_proxy: false,
+        };
         let engine = Engine::new(&config).await.unwrap();
         let app_db = Arc::new(Mutex::new(app_db::open(&dir).unwrap()));
-        let state = AppState { engine, app_db: app_db.clone(), allow_private_proxy: false };
+        let state = AppState {
+            engine,
+            app_db: app_db.clone(),
+            allow_private_proxy: false,
+        };
         ensure_password_setup(&state).await.unwrap();
         ensure_password_setup(&state).await.unwrap();
         assert!(app_db.lock().await.password_hash().unwrap().is_some());

@@ -1,10 +1,10 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use http_body_util::BodyExt;
+use feedea::AppState;
 use feedea::app_db;
 use feedea::config::Config;
 use feedea::engine::Engine;
-use feedea::AppState;
+use http_body_util::BodyExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -22,7 +22,11 @@ async fn health_returns_ok_with_version() {
     };
     let engine = Engine::new(&cfg).await.unwrap();
     let app_db = Arc::new(Mutex::new(app_db::open(&cfg.data_dir).unwrap()));
-    let app = feedea::api::router(AppState { engine, app_db, allow_private_proxy: false });
+    let app = feedea::api::router(AppState {
+        engine,
+        app_db,
+        allow_private_proxy: false,
+    });
     let response = app
         .oneshot(
             Request::builder()

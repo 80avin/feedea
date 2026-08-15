@@ -18,7 +18,10 @@ pub struct CategoryTotals {
 }
 
 pub fn open_readonly(db_path: &Path) -> anyhow::Result<Connection> {
-    Ok(Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?)
+    Ok(Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?)
 }
 
 pub fn descendant_category_ids(
@@ -116,7 +119,11 @@ pub fn category_totals(db_path: &Path) -> anyhow::Result<Vec<CategoryTotals>> {
                 unread += u;
             }
         }
-        out.push(CategoryTotals { category_id: cat, total, unread });
+        out.push(CategoryTotals {
+            category_id: cat,
+            total,
+            unread,
+        });
     }
     Ok(out)
 }
@@ -135,9 +142,18 @@ mod tests {
     #[test]
     fn descendant_category_ids_walks_children_and_includes_self() {
         let mut children: HashMap<String, Vec<String>> = HashMap::new();
-        children.entry("root".into()).or_default().extend(["a".to_string(), "b".to_string()]);
-        children.entry("a".into()).or_default().push("a1".to_string());
-        children.entry("b".into()).or_default().push("b1".to_string());
+        children
+            .entry("root".into())
+            .or_default()
+            .extend(["a".to_string(), "b".to_string()]);
+        children
+            .entry("a".into())
+            .or_default()
+            .push("a1".to_string());
+        children
+            .entry("b".into())
+            .or_default()
+            .push("b1".to_string());
         let mut ids = descendant_category_ids("root", &children);
         ids.sort();
         assert_eq!(ids, vec!["a", "a1", "b", "b1", "root"]);
@@ -149,12 +165,21 @@ mod tests {
 
     #[tokio::test]
     async fn search_and_counts_against_newsflash_db() {
-        let server = crate::engine::tests::FeedServer::start(crate::engine::tests::RSS.to_string(), 10);
+        let server =
+            crate::engine::tests::FeedServer::start(crate::engine::tests::RSS.to_string(), 10);
         let dir = std::env::temp_dir().join(format!("feedea-queries-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let config = Config { data_dir: dir.clone(), host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
+        let config = Config {
+            data_dir: dir.clone(),
+            host: "127.0.0.1".into(),
+            port: 0,
+            allow_private_proxy: false,
+        };
         let engine = Engine::new(&config).await.unwrap();
-        engine.add_feed(&server.url, Some("Test Feed".into()), None).await.unwrap();
+        engine
+            .add_feed(&server.url, Some("Test Feed".into()), None)
+            .await
+            .unwrap();
 
         let db_path = dir.join("engine/data/database.sqlite");
         let hits = search(&db_path, "Alpha", 10).unwrap();
@@ -163,7 +188,11 @@ mod tests {
         let none = search(&db_path, "zzznottherezzz", 10).unwrap();
         assert!(none.is_empty());
         let totals = category_totals(&db_path).unwrap();
-        assert!(totals.iter().any(|t| t.category_id == "NewsFlash.Toplevel" && t.total >= 2 && t.unread >= 2));
+        assert!(
+            totals
+                .iter()
+                .any(|t| t.category_id == "NewsFlash.Toplevel" && t.total >= 2 && t.unread >= 2)
+        );
         assert!(total_article_count(&db_path).unwrap() >= 2);
         server.stop();
     }

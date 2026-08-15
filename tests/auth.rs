@@ -1,12 +1,12 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use http_body_util::BodyExt;
+use feedea::AppState;
 use feedea::api;
 use feedea::app_db;
 use feedea::auth;
 use feedea::config::Config;
 use feedea::engine::Engine;
-use feedea::AppState;
+use http_body_util::BodyExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
@@ -21,25 +21,44 @@ async fn spawn_app() -> axum::Router {
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
+    let config = Config {
+        data_dir: dir,
+        host: "127.0.0.1".into(),
+        port: 0,
+        allow_private_proxy: false,
+    };
     let engine = Engine::new(&config).await.unwrap();
     let mut db = app_db::open(&config.data_dir).unwrap();
-    db.set_password_hash(&auth::hash_password("test-pass").unwrap()).unwrap();
+    db.set_password_hash(&auth::hash_password("test-pass").unwrap())
+        .unwrap();
     let app_db = Arc::new(Mutex::new(db));
-    api::router(AppState { engine, app_db, allow_private_proxy: false })
+    api::router(AppState {
+        engine,
+        app_db,
+        allow_private_proxy: false,
+    })
 }
 
 async fn login_set_cookie(app: &axum::Router, password: &str) -> String {
-    let resp = app.clone()
-        .oneshot(Request::builder().method("POST").uri("/api/login")
-            .header("content-type", "application/json")
-            .body(Body::from(format!(r#"{{"password":"{password}"}}"#)))
-            .unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/login")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(r#"{{"password":"{password}"}}"#)))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    resp.headers().get(axum::http::header::SET_COOKIE)
+    resp.headers()
+        .get(axum::http::header::SET_COOKIE)
         .expect("login should set a session cookie")
-        .to_str().unwrap().to_string()
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 
 fn cookie_pair(set_cookie: &str) -> String {
@@ -49,9 +68,16 @@ fn cookie_pair(set_cookie: &str) -> String {
 #[tokio::test]
 async fn session_without_cookie_reports_not_authenticated() {
     let app = spawn_app().await;
-    let resp = app.clone()
-        .oneshot(Request::builder().uri("/api/session").body(Body::empty()).unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/session")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -63,12 +89,18 @@ async fn session_without_cookie_reports_not_authenticated() {
 #[tokio::test]
 async fn login_with_wrong_password_returns_401() {
     let app = spawn_app().await;
-    let resp = app.clone()
-        .oneshot(Request::builder().method("POST").uri("/api/login")
-            .header("content-type", "application/json")
-            .body(Body::from(r#"{"password":"wrong"}"#))
-            .unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/login")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"password":"wrong"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -88,9 +120,16 @@ async fn login_with_correct_password_sets_session_cookie() {
 #[tokio::test]
 async fn protected_routes_require_auth() {
     let app = spawn_app().await;
-    let resp = app.clone()
-        .oneshot(Request::builder().uri("/api/feeds").body(Body::empty()).unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/feeds")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -101,11 +140,17 @@ async fn protected_routes_require_auth() {
 async fn protected_routes_work_with_valid_session() {
     let app = spawn_app().await;
     let cookie = cookie_pair(&login_set_cookie(&app, "test-pass").await);
-    let resp = app.clone()
-        .oneshot(Request::builder().uri("/api/feeds")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/feeds")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 }
 
@@ -113,11 +158,17 @@ async fn protected_routes_work_with_valid_session() {
 async fn session_with_valid_cookie_is_authenticated() {
     let app = spawn_app().await;
     let cookie = cookie_pair(&login_set_cookie(&app, "test-pass").await);
-    let resp = app.clone()
-        .oneshot(Request::builder().uri("/api/session")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/session")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -129,16 +180,29 @@ async fn session_with_valid_cookie_is_authenticated() {
 async fn logout_invalidates_session() {
     let app = spawn_app().await;
     let cookie = cookie_pair(&login_set_cookie(&app, "test-pass").await);
-    let resp = app.clone()
-        .oneshot(Request::builder().method("POST").uri("/api/logout")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/logout")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let resp = app.clone()
-        .oneshot(Request::builder().uri("/api/feeds")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/feeds")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }

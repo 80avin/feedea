@@ -1,13 +1,13 @@
-use axum::extract::State;
 use axum::Json;
-use serde::de::Deserializer;
+use axum::extract::State;
 use serde::Deserialize;
+use serde::de::Deserializer;
 use serde_json::{Value, json};
 
+use crate::AppState;
 use crate::api::error::{ApiError, ApiResult};
 use crate::auth;
 use crate::dto::{Settings, SettingsStats};
-use crate::AppState;
 
 fn deserialize_keep_articles_days<'de, D>(deserializer: D) -> Result<Option<Option<i64>>, D::Error>
 where
@@ -48,7 +48,10 @@ pub async fn get(State(state): State<AppState>) -> ApiResult<Json<Settings>> {
     }))
 }
 
-pub async fn update(State(state): State<AppState>, Json(req): Json<UpdateSettings>) -> ApiResult<Json<Value>> {
+pub async fn update(
+    State(state): State<AppState>,
+    Json(req): Json<UpdateSettings>,
+) -> ApiResult<Json<Value>> {
     if let Some(theme) = &req.theme {
         state.app_db.lock().await.set_theme(theme)?;
     }
@@ -57,9 +60,15 @@ pub async fn update(State(state): State<AppState>, Json(req): Json<UpdateSetting
     }
     if let Some(minutes) = req.sync_interval_minutes {
         if minutes <= 0 {
-            return Err(ApiError::bad_request("sync_interval_minutes must be positive"));
+            return Err(ApiError::bad_request(
+                "sync_interval_minutes must be positive",
+            ));
         }
-        state.app_db.lock().await.set_sync_interval_minutes(minutes)?;
+        state
+            .app_db
+            .lock()
+            .await
+            .set_sync_interval_minutes(minutes)?;
     }
     if let Some(days) = req.keep_articles_days {
         state.engine.set_keep_articles_days(days).await?;
@@ -67,8 +76,16 @@ pub async fn update(State(state): State<AppState>, Json(req): Json<UpdateSetting
     Ok(Json(json!({ "ok": true })))
 }
 
-pub async fn change_password(State(state): State<AppState>, Json(req): Json<PasswordChange>) -> ApiResult<Json<Value>> {
-    let hash = state.app_db.lock().await.password_hash()?.ok_or_else(|| ApiError::forbidden("no password configured"))?;
+pub async fn change_password(
+    State(state): State<AppState>,
+    Json(req): Json<PasswordChange>,
+) -> ApiResult<Json<Value>> {
+    let hash = state
+        .app_db
+        .lock()
+        .await
+        .password_hash()?
+        .ok_or_else(|| ApiError::forbidden("no password configured"))?;
     if !auth::verify_password(&req.current_password, &hash) {
         return Err(ApiError::unauthorized("wrong password"));
     }

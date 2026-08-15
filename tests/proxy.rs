@@ -1,17 +1,17 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use http_body_util::BodyExt;
+use feedea::AppState;
 use feedea::api;
 use feedea::app_db;
 use feedea::config::Config;
 use feedea::engine::Engine;
-use feedea::AppState;
+use http_body_util::BodyExt;
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread::{self, JoinHandle};
 use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::{self, JoinHandle};
 use tokio::sync::Mutex;
 use tower::ServiceExt;
 
@@ -66,7 +66,11 @@ impl ByteServer {
                 }
             }
         });
-        ByteServer { url, stop, handle: Some(handle) }
+        ByteServer {
+            url,
+            stop,
+            handle: Some(handle),
+        }
     }
 
     fn start_huge_content_length() -> ByteServer {
@@ -98,7 +102,11 @@ impl ByteServer {
                 }
             }
         });
-        ByteServer { url, stop, handle: Some(handle) }
+        ByteServer {
+            url,
+            stop,
+            handle: Some(handle),
+        }
     }
 }
 
@@ -115,7 +123,9 @@ fn url_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -130,11 +140,20 @@ async fn spawn_app(allow_private_proxy: bool) -> axum::Router {
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
+    let config = Config {
+        data_dir: dir,
+        host: "127.0.0.1".into(),
+        port: 0,
+        allow_private_proxy: false,
+    };
     let engine = Engine::new(&config).await.unwrap();
     let db = app_db::open(&config.data_dir).unwrap();
     let app_db = Arc::new(Mutex::new(db));
-    api::router(AppState { engine: engine.clone(), app_db: app_db.clone(), allow_private_proxy })
+    api::router(AppState {
+        engine: engine.clone(),
+        app_db: app_db.clone(),
+        allow_private_proxy,
+    })
 }
 
 #[tokio::test]
@@ -142,12 +161,18 @@ async fn proxy_serves_upstream_image_bytes() {
     let server = ByteServer::start(PNG);
     let app = spawn_app(true).await;
     let uri = format!("/img?u={}", url_encode(&server.url));
-    let resp = app.clone()
+    let resp = app
+        .clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    assert_eq!(resp.headers().get(axum::http::header::CONTENT_TYPE).unwrap(), "image/png");
+    assert_eq!(
+        resp.headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .unwrap(),
+        "image/png"
+    );
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(&body[..], PNG);
 }
@@ -156,7 +181,8 @@ async fn proxy_serves_upstream_image_bytes() {
 async fn proxy_rejects_non_http_scheme() {
     let app = spawn_app(false).await;
     let uri = format!("/img?u={}", url_encode("ftp://example.com/img.png"));
-    let resp = app.clone()
+    let resp = app
+        .clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
         .await
         .unwrap();
@@ -166,7 +192,8 @@ async fn proxy_rejects_non_http_scheme() {
 #[tokio::test]
 async fn proxy_rejects_missing_u() {
     let app = spawn_app(false).await;
-    let resp = app.clone()
+    let resp = app
+        .clone()
         .oneshot(Request::builder().uri("/img").body(Body::empty()).unwrap())
         .await
         .unwrap();
@@ -178,7 +205,8 @@ async fn proxy_upstream_404_is_502() {
     let server = ByteServer::start_with_status(PNG, 404);
     let app = spawn_app(true).await;
     let uri = format!("/img?u={}", url_encode(&server.url));
-    let resp = app.clone()
+    let resp = app
+        .clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
         .await
         .unwrap();
@@ -189,7 +217,8 @@ async fn proxy_upstream_404_is_502() {
 async fn proxy_unreachable_upstream_is_502() {
     let app = spawn_app(true).await;
     let uri = format!("/img?u={}", url_encode("http://127.0.0.1:1/nope.png"));
-    let resp = app.clone()
+    let resp = app
+        .clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
         .await
         .unwrap();
@@ -201,9 +230,11 @@ async fn proxy_rejects_private_target() {
     let server = ByteServer::start(PNG);
     let app = spawn_app(false).await;
     let uri = format!("/img?u={}", url_encode(&server.url));
-    let resp = app.clone()
+    let resp = app
+        .clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
-        .await.unwrap();
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
 }
 
@@ -212,8 +243,10 @@ async fn proxy_rejects_oversized_content_length() {
     let server = ByteServer::start_huge_content_length();
     let app = spawn_app(true).await;
     let uri = format!("/img?u={}", url_encode(&server.url));
-    let resp = app.clone()
+    let resp = app
+        .clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
-        .await.unwrap();
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
 }

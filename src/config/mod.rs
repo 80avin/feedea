@@ -70,7 +70,10 @@ mod tests {
             port: 3000,
             allow_private_proxy: false,
         };
-        assert_eq!(cfg.data_file("feedea.sqlite"), PathBuf::from("/tmp/feedea-test/feedea.sqlite"));
+        assert_eq!(
+            cfg.data_file("feedea.sqlite"),
+            PathBuf::from("/tmp/feedea-test/feedea.sqlite")
+        );
     }
 
     #[test]

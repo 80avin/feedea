@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::AppState;
 use crate::api::error::ApiResult;
 use crate::dto::Headline;
-use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct SaveRequest {
@@ -28,21 +28,31 @@ pub struct MonthGroup {
     pub items: Vec<Headline>,
 }
 
-pub async fn save(State(state): State<AppState>, Path(id): Path<String>, Json(req): Json<SaveRequest>) -> ApiResult<Json<Value>> {
+pub async fn save(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<SaveRequest>,
+) -> ApiResult<Json<Value>> {
     state.engine.mark_article_saved(&id, true).await?;
     let mut app_db = state.app_db.lock().await;
     app_db.save_article(&id, req.note.as_deref(), &req.tags)?;
     Ok(Json(json!({ "ok": true })))
 }
 
-pub async fn unsave(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+pub async fn unsave(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
     state.engine.mark_article_saved(&id, false).await?;
     let mut app_db = state.app_db.lock().await;
     app_db.unsave_article(&id)?;
     Ok(Json(json!({ "ok": true })))
 }
 
-pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams>) -> ApiResult<Json<Value>> {
+pub async fn list(
+    State(state): State<AppState>,
+    Query(params): Query<ListParams>,
+) -> ApiResult<Json<Value>> {
     let limit = params.limit.unwrap_or(50).clamp(1, 200);
     let offset = params.offset.unwrap_or(0).max(0);
     let (rows, _total) = state.app_db.lock().await.saved_articles(0, i64::MAX)?;
@@ -56,7 +66,11 @@ pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams
         let sb = saved_at.get(&b.id);
         sb.cmp(&sa)
     });
-    let mut items: Vec<Headline> = headlines.into_iter().skip(offset as usize).take(limit as usize).collect();
+    let mut items: Vec<Headline> = headlines
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect();
     {
         let app_db = state.app_db.lock().await;
         for item in &mut items {
@@ -70,7 +84,10 @@ pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams
         let month = saved_at[&item.id][..7].to_string();
         match months.last_mut() {
             Some(group) if group.month == month => group.items.push(item),
-            _ => months.push(MonthGroup { month, items: vec![item] }),
+            _ => months.push(MonthGroup {
+                month,
+                items: vec![item],
+            }),
         }
     }
     Ok(Json(json!({ "months": months, "total": total })))

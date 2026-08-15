@@ -1,11 +1,11 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use http_body_util::BodyExt;
+use feedea::AppState;
 use feedea::api;
 use feedea::app_db;
 use feedea::config::Config;
 use feedea::engine::Engine;
-use feedea::AppState;
+use http_body_util::BodyExt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Mutex;
@@ -27,7 +27,11 @@ async fn spawn_app() -> axum::Router {
     };
     let engine = Engine::new(&cfg).await.unwrap();
     let app_db = Arc::new(Mutex::new(app_db::open(&cfg.data_dir).unwrap()));
-    api::router(AppState { engine, app_db, allow_private_proxy: false })
+    api::router(AppState {
+        engine,
+        app_db,
+        allow_private_proxy: false,
+    })
 }
 
 #[tokio::test]
@@ -46,7 +50,9 @@ async fn serves_index_html_at_root() {
 
 #[tokio::test]
 async fn serves_hashed_asset_with_content_type() {
-    let mut assets: Vec<String> = feedea::assets::Assets::iter().map(|p| p.to_string()).collect();
+    let mut assets: Vec<String> = feedea::assets::Assets::iter()
+        .map(|p| p.to_string())
+        .collect();
     assets.sort();
     let asset = assets
         .iter()
@@ -59,7 +65,12 @@ async fn serves_hashed_asset_with_content_type() {
         .expect("dist should contain a non-html, non-css asset");
     let app = spawn_app().await;
     let resp = app
-        .oneshot(Request::builder().uri(format!("/{asset}")).body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri(format!("/{asset}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -69,14 +80,27 @@ async fn serves_hashed_asset_with_content_type() {
     } else {
         assert_ne!(content_type, "text/html");
     }
-    assert!(!resp.into_body().collect().await.unwrap().to_bytes().is_empty());
+    assert!(
+        !resp
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
 async fn spa_fallback_serves_index_html_for_client_route() {
     let app = spawn_app().await;
     let resp = app
-        .oneshot(Request::builder().uri("/feeds/some-article-id").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/feeds/some-article-id")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -87,7 +111,12 @@ async fn spa_fallback_serves_index_html_for_client_route() {
 async fn missing_asset_returns_404_not_index_html() {
     let app = spawn_app().await;
     let resp = app
-        .oneshot(Request::builder().uri("/assets/does-not-exist.js").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/assets/does-not-exist.js")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
@@ -97,11 +126,19 @@ async fn missing_asset_returns_404_not_index_html() {
 async fn api_health_still_works() {
     let app = spawn_app().await;
     let resp = app
-        .oneshot(Request::builder().uri("/api/health").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    assert_eq!(resp.headers().get("content-type").unwrap(), "application/json");
+    assert_eq!(
+        resp.headers().get("content-type").unwrap(),
+        "application/json"
+    );
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["status"], "ok");

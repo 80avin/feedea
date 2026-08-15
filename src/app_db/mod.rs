@@ -18,17 +18,18 @@ pub fn open(data_dir: &Path) -> anyhow::Result<AppDb> {
 
 impl AppDb {
     pub fn set_setting(&mut self, key: &str, value: &str) -> anyhow::Result<()> {
-        self.conn
-            .execute(
-                "INSERT INTO settings (key, value) VALUES (?1, ?2)
+        self.conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                rusqlite::params![key, value],
-            )?;
+            rusqlite::params![key, value],
+        )?;
         Ok(())
     }
 
     pub fn get_setting(&self, key: &str) -> anyhow::Result<Option<String>> {
-        let mut stmt = self.conn.prepare("SELECT value FROM settings WHERE key = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM settings WHERE key = ?1")?;
         let mut rows = stmt.query(rusqlite::params![key])?;
         Ok(rows.next()?.map(|r| r.get(0)).transpose()?)
     }
@@ -42,22 +43,41 @@ impl AppDb {
     }
 
     pub fn delete_session(&mut self, token_hash: &str) -> anyhow::Result<()> {
-        self.conn.execute("DELETE FROM sessions WHERE token_hash = ?1", rusqlite::params![token_hash])?;
+        self.conn.execute(
+            "DELETE FROM sessions WHERE token_hash = ?1",
+            rusqlite::params![token_hash],
+        )?;
         Ok(())
     }
 
     pub fn session_exists(&self, token_hash: &str) -> anyhow::Result<bool> {
-        let mut stmt = self.conn.prepare("SELECT 1 FROM sessions WHERE token_hash = ?1 AND expires_at > ?2")?;
-        let mut rows = stmt.query(rusqlite::params![token_hash, chrono::Utc::now().to_rfc3339()])?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT 1 FROM sessions WHERE token_hash = ?1 AND expires_at > ?2")?;
+        let mut rows = stmt.query(rusqlite::params![
+            token_hash,
+            chrono::Utc::now().to_rfc3339()
+        ])?;
         Ok(rows.next()?.is_some())
     }
 
-    pub fn theme(&self) -> anyhow::Result<Option<String>> { self.get_setting("theme") }
-    pub fn set_theme(&mut self, theme: &str) -> anyhow::Result<()> { self.set_setting("theme", theme) }
-    pub fn accent(&self) -> anyhow::Result<Option<String>> { self.get_setting("accent") }
-    pub fn set_accent(&mut self, accent: &str) -> anyhow::Result<()> { self.set_setting("accent", accent) }
+    pub fn theme(&self) -> anyhow::Result<Option<String>> {
+        self.get_setting("theme")
+    }
+    pub fn set_theme(&mut self, theme: &str) -> anyhow::Result<()> {
+        self.set_setting("theme", theme)
+    }
+    pub fn accent(&self) -> anyhow::Result<Option<String>> {
+        self.get_setting("accent")
+    }
+    pub fn set_accent(&mut self, accent: &str) -> anyhow::Result<()> {
+        self.set_setting("accent", accent)
+    }
     pub fn sync_interval_minutes(&self) -> anyhow::Result<i64> {
-        Ok(self.get_setting("sync_interval_minutes")?.and_then(|s| s.parse().ok()).unwrap_or(30))
+        Ok(self
+            .get_setting("sync_interval_minutes")?
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(30))
     }
     pub fn set_sync_interval_minutes(&mut self, minutes: i64) -> anyhow::Result<()> {
         self.set_setting("sync_interval_minutes", &minutes.to_string())
@@ -72,7 +92,9 @@ impl AppDb {
     }
 
     pub fn article_ids_for_tag(&self, tag: &str) -> anyhow::Result<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT article_id FROM saved_tags WHERE tag = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT article_id FROM saved_tags WHERE tag = ?1")?;
         let mut rows = stmt.query(rusqlite::params![tag])?;
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {
@@ -81,17 +103,31 @@ impl AppDb {
         Ok(out)
     }
 
-    pub fn save_article(&mut self, article_id: &str, note: Option<&str>, tags: &[String]) -> anyhow::Result<()> {
+    pub fn save_article(
+        &mut self,
+        article_id: &str,
+        note: Option<&str>,
+        tags: &[String],
+    ) -> anyhow::Result<()> {
         let now = chrono::Utc::now().to_rfc3339();
         self.conn.execute(
             "INSERT INTO saved (article_id, saved_at, note, updated_at) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(article_id) DO UPDATE SET note = excluded.note, updated_at = excluded.updated_at",
             rusqlite::params![article_id, now, note, now],
         )?;
-        self.conn.execute("DELETE FROM saved_tags WHERE article_id = ?1", rusqlite::params![article_id])?;
+        self.conn.execute(
+            "DELETE FROM saved_tags WHERE article_id = ?1",
+            rusqlite::params![article_id],
+        )?;
         for tag in tags {
-            self.conn.execute("INSERT OR IGNORE INTO tags (tag) VALUES (?1)", rusqlite::params![tag])?;
-            self.conn.execute("INSERT OR REPLACE INTO saved_tags (article_id, tag) VALUES (?1, ?2)", rusqlite::params![article_id, tag])?;
+            self.conn.execute(
+                "INSERT OR IGNORE INTO tags (tag) VALUES (?1)",
+                rusqlite::params![tag],
+            )?;
+            self.conn.execute(
+                "INSERT OR REPLACE INTO saved_tags (article_id, tag) VALUES (?1, ?2)",
+                rusqlite::params![article_id, tag],
+            )?;
         }
         Ok(())
     }
@@ -106,14 +142,28 @@ impl AppDb {
     }
 
     pub fn unsave_article(&mut self, article_id: &str) -> anyhow::Result<()> {
-        self.conn.execute("DELETE FROM saved WHERE article_id = ?1", rusqlite::params![article_id])?;
-        self.conn.execute("DELETE FROM saved_tags WHERE article_id = ?1", rusqlite::params![article_id])?;
+        self.conn.execute(
+            "DELETE FROM saved WHERE article_id = ?1",
+            rusqlite::params![article_id],
+        )?;
+        self.conn.execute(
+            "DELETE FROM saved_tags WHERE article_id = ?1",
+            rusqlite::params![article_id],
+        )?;
         Ok(())
     }
 
-    pub fn saved_articles(&self, offset: i64, limit: i64) -> anyhow::Result<(Vec<(String, String)>, i64)> {
-        let total: i64 = self.conn.query_row("SELECT COUNT(*) FROM saved", [], |r| r.get(0))?;
-        let mut stmt = self.conn.prepare("SELECT article_id, saved_at FROM saved ORDER BY saved_at DESC LIMIT ?1 OFFSET ?2")?;
+    pub fn saved_articles(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> anyhow::Result<(Vec<(String, String)>, i64)> {
+        let total: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM saved", [], |r| r.get(0))?;
+        let mut stmt = self.conn.prepare(
+            "SELECT article_id, saved_at FROM saved ORDER BY saved_at DESC LIMIT ?1 OFFSET ?2",
+        )?;
         let mut rows = stmt.query(rusqlite::params![limit, offset])?;
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {
@@ -123,12 +173,18 @@ impl AppDb {
     }
 
     pub fn note_and_tags(&self, article_id: &str) -> anyhow::Result<(Option<String>, Vec<String>)> {
-        let note: Option<String> = match self.conn.query_row("SELECT note FROM saved WHERE article_id = ?1", rusqlite::params![article_id], |r| r.get(0)) {
+        let note: Option<String> = match self.conn.query_row(
+            "SELECT note FROM saved WHERE article_id = ?1",
+            rusqlite::params![article_id],
+            |r| r.get(0),
+        ) {
             Ok(note) => note,
             Err(rusqlite::Error::QueryReturnedNoRows) => None,
             Err(e) => return Err(e.into()),
         };
-        let mut stmt = self.conn.prepare("SELECT tag FROM saved_tags WHERE article_id = ?1 ORDER BY tag")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT tag FROM saved_tags WHERE article_id = ?1 ORDER BY tag")?;
         let mut rows = stmt.query(rusqlite::params![article_id])?;
         let mut tags = Vec::new();
         while let Some(row) = rows.next()? {
@@ -215,17 +271,28 @@ mod tests {
         let mut db = open(&dir).unwrap();
         let id = "article-1";
         let now = chrono::Utc::now().to_rfc3339();
-        db.save_article(id, Some("keep me"), &["tag1".to_string()]).unwrap();
-        let original_saved_at: String = db.conn
-            .query_row("SELECT saved_at FROM saved WHERE article_id = ?1", rusqlite::params![id], |r| r.get(0))
+        db.save_article(id, Some("keep me"), &["tag1".to_string()])
+            .unwrap();
+        let original_saved_at: String = db
+            .conn
+            .query_row(
+                "SELECT saved_at FROM saved WHERE article_id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
             .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(5));
         db.ensure_saved(id).unwrap();
         let (note, tags) = db.note_and_tags(id).unwrap();
         assert_eq!(note.as_deref(), Some("keep me"));
         assert_eq!(tags, vec!["tag1".to_string()]);
-        let saved_at: String = db.conn
-            .query_row("SELECT saved_at FROM saved WHERE article_id = ?1", rusqlite::params![id], |r| r.get(0))
+        let saved_at: String = db
+            .conn
+            .query_row(
+                "SELECT saved_at FROM saved WHERE article_id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(saved_at, original_saved_at);
         assert_ne!(now, saved_at);
@@ -237,14 +304,26 @@ mod tests {
         let dir = tmp_dir();
         let mut db = open(&dir).unwrap();
         let id = "article-2";
-        db.save_article(id, Some("note"), &["a".to_string()]).unwrap();
-        let original_saved_at: String = db.conn
-            .query_row("SELECT saved_at FROM saved WHERE article_id = ?1", rusqlite::params![id], |r| r.get(0))
+        db.save_article(id, Some("note"), &["a".to_string()])
+            .unwrap();
+        let original_saved_at: String = db
+            .conn
+            .query_row(
+                "SELECT saved_at FROM saved WHERE article_id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
             .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(5));
-        db.save_article(id, Some("edited"), &["b".to_string()]).unwrap();
-        let saved_at: String = db.conn
-            .query_row("SELECT saved_at FROM saved WHERE article_id = ?1", rusqlite::params![id], |r| r.get(0))
+        db.save_article(id, Some("edited"), &["b".to_string()])
+            .unwrap();
+        let saved_at: String = db
+            .conn
+            .query_row(
+                "SELECT saved_at FROM saved WHERE article_id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(saved_at, original_saved_at, "saved_at must survive an edit");
         let (note, tags) = db.note_and_tags(id).unwrap();
@@ -266,7 +345,10 @@ mod tests {
             .filter_map(|x| x.ok())
             .collect();
         for t in ["saved", "saved_tags", "tags", "sessions", "settings"] {
-            assert!(tables.contains(&t.to_string()), "missing table {t}: {tables:?}");
+            assert!(
+                tables.contains(&t.to_string()),
+                "missing table {t}: {tables:?}"
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

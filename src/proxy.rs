@@ -66,7 +66,10 @@ async fn fetch(client: &reqwest::Client, parsed: &url::Url) -> Response {
             if !resp.status().is_success() {
                 return (StatusCode::BAD_GATEWAY, "upstream error").into_response();
             }
-            if resp.content_length().is_some_and(|len| len > MAX_BODY_BYTES) {
+            if resp
+                .content_length()
+                .is_some_and(|len| len > MAX_BODY_BYTES)
+            {
                 return (StatusCode::PAYLOAD_TOO_LARGE, "image too large").into_response();
             }
             let content_type = resp
@@ -128,8 +131,8 @@ fn is_blocked_ip(ip: IpAddr) -> bool {
                 || v4.is_unspecified()
                 || v4.is_broadcast()
                 || is_v4_reserved(v4)
-                    || v4.is_documentation()
-                    || is_v4_cgnat(v4)
+                || v4.is_documentation()
+                || is_v4_cgnat(v4)
         }
         IpAddr::V6(v6) => {
             if let Some(v4) = v6.to_ipv4_mapped() {
@@ -169,7 +172,10 @@ mod tests {
             assert!(is_blocked_ip(ip.parse().unwrap()), "{ip} should be blocked");
         }
         for ip in ["8.8.8.8", "1.1.1.1", "93.184.216.34"] {
-            assert!(!is_blocked_ip(ip.parse().unwrap()), "{ip} should be allowed");
+            assert!(
+                !is_blocked_ip(ip.parse().unwrap()),
+                "{ip} should be allowed"
+            );
         }
     }
 
@@ -179,7 +185,10 @@ mod tests {
             assert!(is_blocked_ip(ip.parse().unwrap()), "{ip} should be blocked");
         }
         for ip in ["2606:4700:4700::1111", "2001:4860:4860::8888"] {
-            assert!(!is_blocked_ip(ip.parse().unwrap()), "{ip} should be allowed");
+            assert!(
+                !is_blocked_ip(ip.parse().unwrap()),
+                "{ip} should be allowed"
+            );
         }
     }
 
@@ -197,7 +206,10 @@ mod tests {
             assert!(is_blocked_ip(ip.parse().unwrap()), "{ip} should be blocked");
         }
         for ip in ["100.63.255.1", "100.128.0.1"] {
-            assert!(!is_blocked_ip(ip.parse().unwrap()), "{ip} should be allowed");
+            assert!(
+                !is_blocked_ip(ip.parse().unwrap()),
+                "{ip} should be allowed"
+            );
         }
     }
 

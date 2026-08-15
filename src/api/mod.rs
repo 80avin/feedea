@@ -27,7 +27,11 @@ pub async fn require_auth(
     if crate::api::auth::is_authenticated(&state, req.headers()).await {
         next.run(req).await
     } else {
-        (StatusCode::UNAUTHORIZED, Json(json!({"error": {"code": "unauthorized", "message": "not logged in"}}))).into_response()
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": {"code": "unauthorized", "message": "not logged in"}})),
+        )
+            .into_response()
     }
 }
 
@@ -37,15 +41,27 @@ pub fn router(state: AppState) -> Router {
         .route("/api/overview", get(overview::overview))
         .route("/api/articles", get(articles::list))
         .route("/api/search/suggestions", get(search::suggestions))
-        .route("/api/articles/{id}", get(articles::detail).patch(articles::patch_article))
+        .route(
+            "/api/articles/{id}",
+            get(articles::detail).patch(articles::patch_article),
+        )
         .route("/api/articles/{id}/read", post(articles::mark_read))
         .route("/api/articles/{id}/unread", post(articles::unread))
-        .route("/api/articles/{id}/save", post(saved::save).put(saved::save).delete(saved::unsave))
+        .route(
+            "/api/articles/{id}/save",
+            post(saved::save).put(saved::save).delete(saved::unsave),
+        )
         .route("/api/read-all", post(articles::read_all))
         .route("/api/saved", get(saved::list))
         .route("/api/tags", get(saved::tags))
-        .route("/api/categories", get(categories::list).post(categories::create))
-        .route("/api/categories/{id}", patch(categories::update).delete(categories::remove))
+        .route(
+            "/api/categories",
+            get(categories::list).post(categories::create),
+        )
+        .route(
+            "/api/categories/{id}",
+            patch(categories::update).delete(categories::remove),
+        )
         .route("/api/categories/{id}/read", post(categories::mark_read))
         .route("/api/favicon/{feed_id}", get(articles::favicon))
         .route("/api/thumbnail/{article_id}", get(articles::thumbnail))
@@ -53,13 +69,19 @@ pub fn router(state: AppState) -> Router {
         .route("/api/sources/discover", post(sources::discover))
         .route("/api/sources/import-opml", post(sources::import_opml))
         .route("/api/sources/export-opml", get(sources::export_opml))
-        .route("/api/sources/{id}", patch(sources::update).delete(sources::remove))
+        .route(
+            "/api/sources/{id}",
+            patch(sources::update).delete(sources::remove),
+        )
         .route("/api/sources/{id}/read", post(sources::mark_read))
         .route("/api/sources/{id}/refresh", post(sources::refresh))
         .route("/api/sources/refresh-all", post(sources::refresh_all))
         .route("/api/settings", get(settings::get).patch(settings::update))
         .route("/api/settings/password", post(settings::change_password))
-        .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_auth));
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            require_auth,
+        ));
 
     Router::new()
         .route("/api/health", get(health::health))

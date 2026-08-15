@@ -74,29 +74,47 @@ mod tests {
     #[test]
     fn relative_link_becomes_absolute() {
         let out = rewrite_html(r#"<p><a href="/rel">link</a></p>"#, BASE);
-        assert!(out.contains(r#"href="https://example.com/rel""#), "got: {out}");
+        assert!(
+            out.contains(r#"href="https://example.com/rel""#),
+            "got: {out}"
+        );
     }
 
     #[test]
     fn absolute_image_is_proxied_and_preserves_original() {
         let out = rewrite_html(r#"<img src="https://x/y.png">"#, BASE);
         let encoded = percent_encode(b"https://x/y.png", NON_ALPHANUMERIC);
-        assert!(out.contains(&format!("src=\"/img?u={encoded}\"")), "got: {out}");
-        assert!(out.contains(r#"data-original="https://x/y.png""#), "got: {out}");
+        assert!(
+            out.contains(&format!("src=\"/img?u={encoded}\"")),
+            "got: {out}"
+        );
+        assert!(
+            out.contains(r#"data-original="https://x/y.png""#),
+            "got: {out}"
+        );
     }
 
     #[test]
     fn relative_image_src_resolves() {
         let out = rewrite_html(r#"<img src="/img.png">"#, BASE);
         let encoded = percent_encode(b"https://example.com/img.png", NON_ALPHANUMERIC);
-        assert!(out.contains(&format!("src=\"/img?u={encoded}\"")), "got: {out}");
-        assert!(out.contains(r#"data-original="https://example.com/img.png""#), "got: {out}");
+        assert!(
+            out.contains(&format!("src=\"/img?u={encoded}\"")),
+            "got: {out}"
+        );
+        assert!(
+            out.contains(r#"data-original="https://example.com/img.png""#),
+            "got: {out}"
+        );
     }
 
     #[test]
     fn data_uri_image_is_not_proxied() {
         let out = rewrite_html(r#"<img src="data:image/png;base64,AAAA">"#, BASE);
-        assert!(out.contains(r#"src="data:image/png;base64,AAAA""#), "got: {out}");
+        assert!(
+            out.contains(r#"src="data:image/png;base64,AAAA""#),
+            "got: {out}"
+        );
         assert!(!out.contains("/img?u="), "got: {out}");
         assert!(!out.contains("data-original"), "got: {out}");
     }
@@ -104,7 +122,10 @@ mod tests {
     #[test]
     fn non_http_scheme_image_is_not_proxied() {
         let out = rewrite_html(r#"<img src="ftp://example.com/x.png">"#, BASE);
-        assert!(out.contains(r#"src="ftp://example.com/x.png""#), "got: {out}");
+        assert!(
+            out.contains(r#"src="ftp://example.com/x.png""#),
+            "got: {out}"
+        );
         assert!(!out.contains("/img?u="), "got: {out}");
         assert!(!out.contains("data-original"), "got: {out}");
     }
@@ -112,7 +133,10 @@ mod tests {
     #[test]
     fn external_absolute_link_stays_absolute() {
         let out = rewrite_html(r#"<a href="https://external.org/page">ext</a>"#, BASE);
-        assert!(out.contains(r#"href="https://external.org/page""#), "got: {out}");
+        assert!(
+            out.contains(r#"href="https://external.org/page""#),
+            "got: {out}"
+        );
     }
 
     #[test]

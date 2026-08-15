@@ -1,11 +1,11 @@
-use axum::extract::{Path, State};
 use axum::Json;
+use axum::extract::{Path, State};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::AppState;
 use crate::api::error::{ApiError, ApiResult};
 use crate::dto::CategoryNode;
-use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct CreateCategory {
@@ -30,9 +30,17 @@ pub async fn list(State(state): State<AppState>) -> ApiResult<Json<Value>> {
     Ok(Json(json!({ "categories": categories })))
 }
 
-pub async fn create(State(state): State<AppState>, Json(req): Json<CreateCategory>) -> ApiResult<Json<CategoryNode>> {
-    let id = state.engine.add_category(&req.name, req.parent_id.as_deref()).await?;
-    let parent_id = req.parent_id.unwrap_or_else(|| news_flash::models::NEWSFLASH_TOPLEVEL.as_str().to_string());
+pub async fn create(
+    State(state): State<AppState>,
+    Json(req): Json<CreateCategory>,
+) -> ApiResult<Json<CategoryNode>> {
+    let id = state
+        .engine
+        .add_category(&req.name, req.parent_id.as_deref())
+        .await?;
+    let parent_id = req
+        .parent_id
+        .unwrap_or_else(|| news_flash::models::NEWSFLASH_TOPLEVEL.as_str().to_string());
     Ok(Json(CategoryNode {
         category_id: id,
         name: req.name,
@@ -42,7 +50,11 @@ pub async fn create(State(state): State<AppState>, Json(req): Json<CreateCategor
     }))
 }
 
-pub async fn update(State(state): State<AppState>, Path(id): Path<String>, Json(req): Json<UpdateCategory>) -> ApiResult<Json<CategoryNode>> {
+pub async fn update(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateCategory>,
+) -> ApiResult<Json<CategoryNode>> {
     ensure_exists(&state, &id).await?;
     if req.name.is_none() && req.parent_id.is_none() {
         return Err(ApiError::bad_request("nothing to update"));
@@ -55,7 +67,9 @@ pub async fn update(State(state): State<AppState>, Path(id): Path<String>, Json(
         if let Some(node) = find_node(&tree, &id)
             && contains_node(node, parent_id)
         {
-            return Err(ApiError::bad_request("cannot move a category into its own descendant"));
+            return Err(ApiError::bad_request(
+                "cannot move a category into its own descendant",
+            ));
         }
     }
     if let Some(name) = &req.name {
@@ -69,7 +83,11 @@ pub async fn update(State(state): State<AppState>, Path(id): Path<String>, Json(
     Ok(Json(node.clone()))
 }
 
-pub async fn remove(State(state): State<AppState>, Path(id): Path<String>, Json(req): Json<DeleteCategory>) -> ApiResult<Json<Value>> {
+pub async fn remove(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<DeleteCategory>,
+) -> ApiResult<Json<Value>> {
     ensure_exists(&state, &id).await?;
     if req.remove_children {
         let article_ids = state.engine.category_article_ids(&id).await?;
@@ -78,11 +96,17 @@ pub async fn remove(State(state): State<AppState>, Path(id): Path<String>, Json(
             app_db.unsave_article(&article_id)?;
         }
     }
-    state.engine.remove_category(&id, req.remove_children).await?;
+    state
+        .engine
+        .remove_category(&id, req.remove_children)
+        .await?;
     Ok(Json(json!({ "ok": true })))
 }
 
-pub async fn mark_read(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+pub async fn mark_read(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
     ensure_exists(&state, &id).await?;
     state.engine.mark_category_read(&id).await?;
     Ok(Json(json!({ "ok": true })))

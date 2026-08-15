@@ -1,13 +1,13 @@
-use axum::extract::{Path, Query, State};
-use axum::response::{IntoResponse, Response};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::AppState;
 use crate::api::error::{ApiError, ApiResult};
 use crate::dto::{ArticleDetail, Headline};
-use crate::AppState;
 use news_flash::models::{ArticleFilter, ArticleOrder, CategoryID, FeedID, Marked, OrderBy, Read};
 
 #[derive(Deserialize)]
@@ -22,7 +22,10 @@ pub struct ListParams {
     pub limit: Option<i64>,
 }
 
-pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams>) -> ApiResult<Json<Vec<Headline>>> {
+pub async fn list(
+    State(state): State<AppState>,
+    Query(params): Query<ListParams>,
+) -> ApiResult<Json<Vec<Headline>>> {
     let limit = params.limit.unwrap_or(30).clamp(1, 200);
     if let Some(q) = params.search
         && !q.trim().is_empty()
@@ -61,7 +64,11 @@ pub async fn list(State(state): State<AppState>, Query(params): Query<ListParams
         if ids.is_empty() {
             return Ok(Json(Vec::new()));
         }
-        filter.ids = Some(ids.into_iter().map(|id| news_flash::models::ArticleID::new(&id)).collect());
+        filter.ids = Some(
+            ids.into_iter()
+                .map(|id| news_flash::models::ArticleID::new(&id))
+                .collect(),
+        );
     }
     Ok(Json(state.engine.get_headlines(filter).await?))
 }
@@ -77,7 +84,10 @@ pub struct MarkReadRequest {
     pub read: Option<bool>,
 }
 
-pub async fn detail(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<ArticleDetail>> {
+pub async fn detail(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<ArticleDetail>> {
     let mut article = state.engine.get_article_detail(&id).await?;
     let (note, tags) = state.app_db.lock().await.note_and_tags(&id)?;
     article.note = note;
@@ -112,11 +122,17 @@ pub async fn mark_read(
     Path(id): Path<String>,
     Json(req): Json<MarkReadRequest>,
 ) -> ApiResult<Json<Value>> {
-    state.engine.set_article_read(&id, req.read.unwrap_or(true)).await?;
+    state
+        .engine
+        .set_article_read(&id, req.read.unwrap_or(true))
+        .await?;
     Ok(Json(json!({ "ok": true })))
 }
 
-pub async fn unread(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+pub async fn unread(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
     state.engine.set_article_read(&id, false).await?;
     Ok(Json(json!({ "ok": true })))
 }
@@ -128,20 +144,18 @@ pub async fn read_all(State(state): State<AppState>) -> ApiResult<Json<Value>> {
 
 pub async fn favicon(State(state): State<AppState>, Path(feed_id): Path<String>) -> Response {
     match state.engine.get_favicon(&feed_id).await {
-        Ok(Some((content_type, data))) => (
-            [(header::CONTENT_TYPE, content_type)],
-            data,
-        ).into_response(),
+        Ok(Some((content_type, data))) => {
+            ([(header::CONTENT_TYPE, content_type)], data).into_response()
+        }
         _ => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
 pub async fn thumbnail(State(state): State<AppState>, Path(article_id): Path<String>) -> Response {
     match state.engine.get_article_thumbnail(&article_id).await {
-        Ok(Some((content_type, data))) => (
-            [(header::CONTENT_TYPE, content_type)],
-            data,
-        ).into_response(),
+        Ok(Some((content_type, data))) => {
+            ([(header::CONTENT_TYPE, content_type)], data).into_response()
+        }
         _ => StatusCode::NOT_FOUND.into_response(),
     }
 }

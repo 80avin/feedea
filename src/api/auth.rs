@@ -1,26 +1,36 @@
+use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::auth;
 use crate::AppState;
+use crate::auth;
 
 pub const SESSION_COOKIE: &str = "feedea_session";
 const SESSION_TTL_SECS: i64 = 30 * 24 * 3600;
 
 #[derive(Deserialize)]
-pub struct LoginRequest { pub password: String }
+pub struct LoginRequest {
+    pub password: String,
+}
 
 pub async fn login(State(state): State<AppState>, Json(req): Json<LoginRequest>) -> Response {
     let hash = state.app_db.lock().await.password_hash().unwrap_or(None);
     let Some(hash) = hash else {
-        return (StatusCode::FORBIDDEN, Json(json!({"error": {"code": "setup_required", "message": "no password configured"}}))).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": {"code": "setup_required", "message": "no password configured"}})),
+        )
+            .into_response();
     };
     if !auth::verify_password(&req.password, &hash) {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error": {"code": "unauthorized", "message": "wrong password"}}))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": {"code": "unauthorized", "message": "wrong password"}})),
+        )
+            .into_response();
     }
     let token = auth::generate_token();
     let token_hash = auth::sha256_hex(&token);
@@ -52,12 +62,20 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Respon
             format!("{SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"),
         )],
         Json(json!({"ok": true})),
-    ).into_response()
+    )
+        .into_response()
 }
 
 pub async fn session(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let authed = is_authenticated(&state, &headers).await;
-    let setup_required = state.app_db.lock().await.password_hash().ok().flatten().is_none();
+    let setup_required = state
+        .app_db
+        .lock()
+        .await
+        .password_hash()
+        .ok()
+        .flatten()
+        .is_none();
     (
         StatusCode::OK,
         Json(json!({
@@ -65,13 +83,21 @@ pub async fn session(State(state): State<AppState>, headers: HeaderMap) -> Respo
             "version": crate::version(),
             "setup_required": setup_required,
         })),
-    ).into_response()
+    )
+        .into_response()
 }
 
 pub async fn is_authenticated(state: &AppState, headers: &HeaderMap) -> bool {
-    let Some(token) = cookie_value(headers, SESSION_COOKIE) else { return false };
+    let Some(token) = cookie_value(headers, SESSION_COOKIE) else {
+        return false;
+    };
     let token_hash = auth::sha256_hex(&token);
-    state.app_db.lock().await.session_exists(&token_hash).unwrap_or(false)
+    state
+        .app_db
+        .lock()
+        .await
+        .session_exists(&token_hash)
+        .unwrap_or(false)
 }
 
 pub fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {

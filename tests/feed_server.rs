@@ -2,8 +2,8 @@
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 
 pub struct FeedServer {
@@ -48,7 +48,11 @@ impl FeedServer {
                 }
             }
         });
-        FeedServer { url, stop, handle: Some(handle) }
+        FeedServer {
+            url,
+            stop,
+            handle: Some(handle),
+        }
     }
 
     pub fn stop(mut self) {

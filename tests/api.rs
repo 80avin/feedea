@@ -1,12 +1,12 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use http_body_util::BodyExt;
+use feedea::AppState;
 use feedea::api;
 use feedea::app_db;
 use feedea::auth;
 use feedea::config::Config;
 use feedea::engine::Engine;
-use feedea::AppState;
+use http_body_util::BodyExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
@@ -41,14 +41,22 @@ fn url_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
     out
 }
 
-async fn spawn_app() -> (String, axum::Router, feed_server::FeedServer, Arc<Mutex<app_db::AppDb>>, std::path::PathBuf) {
+async fn spawn_app() -> (
+    String,
+    axum::Router,
+    feed_server::FeedServer,
+    Arc<Mutex<app_db::AppDb>>,
+    std::path::PathBuf,
+) {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -59,26 +67,51 @@ async fn spawn_app() -> (String, axum::Router, feed_server::FeedServer, Arc<Mute
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    let config = Config { data_dir: dir, host: "127.0.0.1".into(), port: 0, allow_private_proxy: false };
+    let config = Config {
+        data_dir: dir,
+        host: "127.0.0.1".into(),
+        port: 0,
+        allow_private_proxy: false,
+    };
     let engine = Engine::new(&config).await.unwrap();
     let mut db = app_db::open(&config.data_dir).unwrap();
-    db.set_password_hash(&auth::hash_password("test-pass").unwrap()).unwrap();
+    db.set_password_hash(&auth::hash_password("test-pass").unwrap())
+        .unwrap();
     let app_db = Arc::new(Mutex::new(db));
-    let router = api::router(AppState { engine: engine.clone(), app_db: app_db.clone(), allow_private_proxy: false });
-    (server.url.clone(), router, server, app_db, config.data_dir.clone())
+    let router = api::router(AppState {
+        engine: engine.clone(),
+        app_db: app_db.clone(),
+        allow_private_proxy: false,
+    });
+    (
+        server.url.clone(),
+        router,
+        server,
+        app_db,
+        config.data_dir.clone(),
+    )
 }
 
 async fn login_cookie(app: &axum::Router) -> String {
-    let resp = app.clone()
-        .oneshot(Request::builder().method("POST").uri("/api/login")
-            .header("content-type", "application/json")
-            .body(Body::from(r#"{"password":"test-pass"}"#))
-            .unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/login")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"password":"test-pass"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    resp.headers().get(axum::http::header::SET_COOKIE)
+    resp.headers()
+        .get(axum::http::header::SET_COOKIE)
         .expect("login should set a session cookie")
-        .to_str().unwrap().to_string()
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 
 fn cookie_pair(set_cookie: &str) -> String {
@@ -90,43 +123,69 @@ async fn add_source_sync_and_read_articles() {
     let (feed_url, app, _server, _db, _dir) = spawn_app().await;
     let cookie = cookie_pair(&login_cookie(&app).await);
 
-    let add_resp = app.clone()
-        .oneshot(Request::builder().method("POST").uri("/api/sources")
-            .header("content-type", "application/json")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::from(format!(r#"{{"url":"{feed_url}","title":"API Feed"}}"#)))
-            .unwrap())
-        .await.unwrap();
+    let add_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(format!(
+                    r#"{{"url":"{feed_url}","title":"API Feed"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(add_resp.status(), StatusCode::OK);
     let body = add_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["title"], "API Feed");
     let feed_id = json["id"].as_str().unwrap().to_string();
 
-    let refresh_resp = app.clone()
-        .oneshot(Request::builder().method("POST")
-            .uri("/api/sources/refresh-all")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let refresh_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources/refresh-all")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(refresh_resp.status(), StatusCode::OK);
 
-    let single_resp = app.clone()
-        .oneshot(Request::builder().method("POST")
-            .uri(format!("/api/sources/{}/refresh", url_encode(&feed_id)))
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let single_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/sources/{}/refresh", url_encode(&feed_id)))
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(single_resp.status(), StatusCode::OK);
     let body = single_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["new_articles"], 0);
 
-    let list_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let list_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?offset=0&limit=10")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(list_resp.status(), StatusCode::OK);
     let body = list_resp.into_body().collect().await.unwrap().to_bytes();
     let articles: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -135,11 +194,17 @@ async fn add_source_sync_and_read_articles() {
     assert_eq!(arr[0]["title"], "API Article");
 
     let id = arr[0]["id"].as_str().unwrap().to_string();
-    let detail_resp = app.clone()
-        .oneshot(Request::builder().uri(format!("/api/articles/{id}"))
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let detail_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/articles/{id}"))
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(detail_resp.status(), StatusCode::OK);
 }
 
@@ -147,11 +212,17 @@ async fn add_source_sync_and_read_articles() {
 async fn detail_unknown_article_returns_404() {
     let (_feed_url, app, _server, _db, _dir) = spawn_app().await;
     let cookie = cookie_pair(&login_cookie(&app).await);
-    let resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles/does-not-exist")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles/does-not-exist")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -162,13 +233,19 @@ async fn detail_unknown_article_returns_404() {
 async fn add_source_with_invalid_url_returns_400() {
     let (_feed_url, app, _server, _db, _dir) = spawn_app().await;
     let cookie = cookie_pair(&login_cookie(&app).await);
-    let resp = app.clone()
-        .oneshot(Request::builder().method("POST").uri("/api/sources")
-            .header("content-type", "application/json")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::from(r#"{"url":"not a url"}"#))
-            .unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(r#"{"url":"not a url"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
@@ -176,29 +253,50 @@ async fn add_source_with_invalid_url_returns_400() {
 async fn refresh_unknown_feed_returns_404() {
     let (_feed_url, app, _server, _db, _dir) = spawn_app().await;
     let cookie = cookie_pair(&login_cookie(&app).await);
-    let resp = app.clone()
-        .oneshot(Request::builder().method("POST")
-            .uri("/api/sources/does-not-exist/refresh")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources/does-not-exist/refresh")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
 
 async fn add_and_sync(app: &axum::Router, cookie: &str, feed_url: &str) {
-    let add_resp = app.clone()
-        .oneshot(Request::builder().method("POST").uri("/api/sources")
-            .header("content-type", "application/json")
-            .header(axum::http::header::COOKIE, cookie)
-            .body(Body::from(format!(r#"{{"url":"{feed_url}","title":"API Feed"}}"#)))
-            .unwrap())
-        .await.unwrap();
+    let add_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, cookie)
+                .body(Body::from(format!(
+                    r#"{{"url":"{feed_url}","title":"API Feed"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(add_resp.status(), StatusCode::OK);
-    let refresh_resp = app.clone()
-        .oneshot(Request::builder().method("POST").uri("/api/sources/refresh-all")
-            .header(axum::http::header::COOKIE, cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let refresh_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources/refresh-all")
+                .header(axum::http::header::COOKIE, cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(refresh_resp.status(), StatusCode::OK);
 }
 
@@ -208,11 +306,17 @@ async fn search_filters_and_suggestions() {
     let cookie = cookie_pair(&login_cookie(&app).await);
     add_and_sync(&app, &cookie, &feed_url).await;
 
-    let search_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?search=API")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let search_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?search=API")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(search_resp.status(), StatusCode::OK);
     let body = search_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -220,11 +324,17 @@ async fn search_filters_and_suggestions() {
     assert_eq!(arr.len(), 1);
     assert_eq!(arr[0]["title"], "API Article");
 
-    let alpha_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?search=Alpha")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let alpha_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?search=Alpha")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(alpha_resp.status(), StatusCode::OK);
     let body = alpha_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -232,11 +342,17 @@ async fn search_filters_and_suggestions() {
     assert_eq!(arr.len(), 1);
     assert_eq!(arr[0]["title"], "Article Two");
 
-    let sug_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/search/suggestions?q=API")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let sug_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/search/suggestions?q=API")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(sug_resp.status(), StatusCode::OK);
     let body = sug_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -244,22 +360,34 @@ async fn search_filters_and_suggestions() {
     assert!(!suggestions.is_empty());
     assert_eq!(suggestions[0]["title"], "API Article");
 
-    let none_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?search=zzznope")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let none_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?search=zzznope")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(none_resp.status(), StatusCode::OK);
     let body = none_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json.as_array().unwrap().is_empty());
 
     for q in ["", "%20"] {
-        let sug_resp = app.clone()
-            .oneshot(Request::builder().uri(format!("/api/search/suggestions?q={q}"))
-                .header(axum::http::header::COOKIE, &cookie)
-                .body(Body::empty()).unwrap())
-            .await.unwrap();
+        let sug_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/search/suggestions?q={q}"))
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(sug_resp.status(), StatusCode::OK);
         let body = sug_resp.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -273,42 +401,76 @@ async fn saved_and_tag_filters() {
     let cookie = cookie_pair(&login_cookie(&app).await);
     add_and_sync(&app, &cookie, &feed_url).await;
 
-    let saved_true_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?saved=true")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let saved_true_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?saved=true")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(saved_true_resp.status(), StatusCode::OK);
-    let body = saved_true_resp.into_body().collect().await.unwrap().to_bytes();
+    let body = saved_true_resp
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json.as_array().unwrap().is_empty());
 
-    let unsaved_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?saved=false")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let unsaved_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?saved=false")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(unsaved_resp.status(), StatusCode::OK);
     let body = unsaved_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let arr = json.as_array().unwrap();
     assert_eq!(arr.len(), 2);
 
-    let unknown_tag_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?tag=zzznope")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let unknown_tag_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?tag=zzznope")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(unknown_tag_resp.status(), StatusCode::OK);
-    let body = unknown_tag_resp.into_body().collect().await.unwrap().to_bytes();
+    let body = unknown_tag_resp
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json.as_array().unwrap().is_empty());
 
-    let list_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let list_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?offset=0&limit=10")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(list_resp.status(), StatusCode::OK);
     let body = list_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -317,25 +479,39 @@ async fn saved_and_tag_filters() {
     let id = arr[0]["id"].as_str().unwrap().to_string();
 
     {
-        let engine_db = rusqlite::Connection::open(dir.join("engine/data/database.sqlite")).unwrap();
-        engine_db.execute("UPDATE articles SET marked = 0 WHERE article_id = ?1", rusqlite::params![id]).unwrap();
+        let engine_db =
+            rusqlite::Connection::open(dir.join("engine/data/database.sqlite")).unwrap();
+        engine_db
+            .execute(
+                "UPDATE articles SET marked = 0 WHERE article_id = ?1",
+                rusqlite::params![id],
+            )
+            .unwrap();
         let db = db.lock().await;
         let now = chrono::Utc::now().to_rfc3339();
         db.conn.execute(
             "INSERT OR REPLACE INTO saved (article_id, saved_at, updated_at) VALUES (?1, ?2, ?2)",
             rusqlite::params![id, now],
         ).unwrap();
-        db.conn.execute(
-            "INSERT OR REPLACE INTO saved_tags (article_id, tag) VALUES (?1, ?2)",
-            rusqlite::params![id, "favorites"],
-        ).unwrap();
+        db.conn
+            .execute(
+                "INSERT OR REPLACE INTO saved_tags (article_id, tag) VALUES (?1, ?2)",
+                rusqlite::params![id, "favorites"],
+            )
+            .unwrap();
     }
 
-    let tag_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?tag=favorites")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let tag_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?tag=favorites")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(tag_resp.status(), StatusCode::OK);
     let body = tag_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -343,11 +519,17 @@ async fn saved_and_tag_filters() {
     assert_eq!(arr.len(), 1);
     assert_eq!(arr[0]["id"], id);
 
-    let saved_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?saved=true")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let saved_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?saved=true")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(saved_resp.status(), StatusCode::OK);
     let body = saved_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -357,14 +539,26 @@ async fn saved_and_tag_filters() {
 }
 
 async fn unread_state(app: &axum::Router, cookie: &str, id: &str) -> bool {
-    let resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10")
-            .header(axum::http::header::COOKIE, cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?offset=0&limit=10")
+                .header(axum::http::header::COOKIE, cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    json.as_array().unwrap().iter().find(|a| a["id"] == id).unwrap()["unread"].as_bool().unwrap()
+    json.as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["id"] == id)
+        .unwrap()["unread"]
+        .as_bool()
+        .unwrap()
 }
 
 #[tokio::test]
@@ -373,11 +567,17 @@ async fn unread_filter_filters_read_and_unread() {
     let cookie = cookie_pair(&login_cookie(&app).await);
     add_and_sync(&app, &cookie, &feed_url).await;
 
-    let list_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let list_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?offset=0&limit=10")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     let body = list_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let arr = json.as_array().unwrap();
@@ -385,42 +585,66 @@ async fn unread_filter_filters_read_and_unread() {
     let id = arr[0]["id"].as_str().unwrap().to_string();
     assert!(unread_state(&app, &cookie, &id).await);
 
-    let patch_resp = app.clone()
-        .oneshot(Request::builder().method("PATCH")
-            .uri(format!("/api/articles/{id}"))
-            .header("content-type", "application/json")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::from(r#"{"read":true}"#)).unwrap())
-        .await.unwrap();
+    let patch_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/api/articles/{id}"))
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(r#"{"read":true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(patch_resp.status(), StatusCode::OK);
 
-    let unread_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?unread=true&offset=0&limit=10")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let unread_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?unread=true&offset=0&limit=10")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     let body = unread_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let arr = json.as_array().unwrap();
     assert_eq!(arr.len(), 1, "unread=true should exclude the read article");
     assert_ne!(arr[0]["id"], id);
 
-    let read_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?unread=false&offset=0&limit=10")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let read_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?unread=false&offset=0&limit=10")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     let body = read_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let arr = json.as_array().unwrap();
     assert_eq!(arr.len(), 1, "unread=false should include the read article");
     assert_eq!(arr[0]["id"], id);
 
-    let bad_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?unread=maybe")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let bad_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?unread=maybe")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(bad_resp.status(), StatusCode::BAD_REQUEST);
 }
 
@@ -430,11 +654,17 @@ async fn patch_read_then_unread_toggle_updates_state() {
     let cookie = cookie_pair(&login_cookie(&app).await);
     add_and_sync(&app, &cookie, &feed_url).await;
 
-    let list_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/articles?offset=0&limit=10")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let list_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/articles?offset=0&limit=10")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(list_resp.status(), StatusCode::OK);
     let body = list_resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -443,32 +673,50 @@ async fn patch_read_then_unread_toggle_updates_state() {
     let id = arr[0]["id"].as_str().unwrap().to_string();
     assert!(unread_state(&app, &cookie, &id).await);
 
-    let patch_resp = app.clone()
-        .oneshot(Request::builder().method("PATCH")
-            .uri(format!("/api/articles/{id}"))
-            .header("content-type", "application/json")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::from(r#"{"read":true}"#)).unwrap())
-        .await.unwrap();
+    let patch_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/api/articles/{id}"))
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(r#"{"read":true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(patch_resp.status(), StatusCode::OK);
     assert!(!unread_state(&app, &cookie, &id).await);
 
-    let unread_resp = app.clone()
-        .oneshot(Request::builder().method("POST")
-            .uri(format!("/api/articles/{id}/unread"))
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let unread_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/articles/{id}/unread"))
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(unread_resp.status(), StatusCode::OK);
     assert!(unread_state(&app, &cookie, &id).await);
 
-    let read_resp = app.clone()
-        .oneshot(Request::builder().method("POST")
-            .uri(format!("/api/articles/{id}/read"))
-            .header("content-type", "application/json")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::from("{}")).unwrap())
-        .await.unwrap();
+    let read_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/articles/{id}/read"))
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(read_resp.status(), StatusCode::OK);
     assert!(!unread_state(&app, &cookie, &id).await);
 }
@@ -479,31 +727,59 @@ async fn read_all_marks_everything_read() {
     let cookie = cookie_pair(&login_cookie(&app).await);
     add_and_sync(&app, &cookie, &feed_url).await;
 
-    let overview_resp = app.clone()
-        .oneshot(Request::builder().uri("/api/overview")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let overview_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/overview")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(overview_resp.status(), StatusCode::OK);
-    let body = overview_resp.into_body().collect().await.unwrap().to_bytes();
+    let body = overview_resp
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json["all"]["unread_count"].as_i64().unwrap() > 0);
 
-    let read_all_resp = app.clone()
-        .oneshot(Request::builder().method("POST")
-            .uri("/api/read-all")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let read_all_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/read-all")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(read_all_resp.status(), StatusCode::OK);
 
-    let overview_after = app.clone()
-        .oneshot(Request::builder().uri("/api/overview")
-            .header(axum::http::header::COOKIE, &cookie)
-            .body(Body::empty()).unwrap())
-        .await.unwrap();
+    let overview_after = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/overview")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(overview_after.status(), StatusCode::OK);
-    let body = overview_after.into_body().collect().await.unwrap().to_bytes();
+    let body = overview_after
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["all"]["unread_count"], 0);
 }
