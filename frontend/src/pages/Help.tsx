@@ -1,7 +1,7 @@
 import { QuestionMarkCircleIcon } from "@heroicons/react/24/outline";
 
-const REPO_URL = "https://github.com/yourname/feedea";
-const ISSUES_URL = "https://github.com/yourname/feedea/issues";
+const REPO_URL = "https://github.com/80avin/feedea";
+const ISSUES_URL = "https://github.com/80avin/feedea/issues";
 
 export default function Help() {
   return (

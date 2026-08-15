@@ -57,10 +57,11 @@ jobs:
         shell: pwsh
         run: |
           echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "VCPKGRS_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           if (Test-Path "C:\Program Files\LLVM\bin") {
             echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           }
-          vcpkg install libxml2
+          vcpkg install libxml2 --triplet x64-windows-static-md
 
       - uses: Swatinem/rust-cache@v2
 

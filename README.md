@@ -1,5 +1,8 @@
 # Feedea
 
+[![CI](https://github.com/80avin/feedea/actions/workflows/ci.yml/badge.svg)](https://github.com/80avin/feedea/actions/workflows/ci.yml)
+[![Release](https://github.com/80avin/feedea/actions/workflows/release.yml/badge.svg)](https://github.com/80avin/feedea/actions/workflows/release.yml)
+
 A self-hosted RSS feed aggregator with a built-in web UI.
 
 Single Rust binary, embedded React frontend, SQLite storage. Built on the
@@ -65,7 +68,8 @@ brew install pkg-config openssl libxml2
 # libclang is provided by the Xcode Command Line Tools (xcode-select --install)
 
 # Windows (vcpkg) — then set the env vars below
-vcpkg install libxml2
+vcpkg install libxml2 --triplet x64-windows-static-md
+set VCPKGRS_TRIPLET=x64-windows-static-md
 set LIBCLANG_PATH=C:\Program Files\LLVM\bin
 set VCPKG_ROOT=C:\vcpkg
 ```
@@ -184,6 +188,10 @@ tests, frontend typecheck/lint) via GitHub Actions.
 Pushing a tag like `v0.1.0` builds release binaries for Linux (x64, arm64),
 Windows x64, and macOS (arm64, x64) on native runners, runs the end-to-end
 smoke test on Linux, and attaches them to a draft GitHub Release.
+
+The CI jobs install the build dependencies listed above (libxml2, OpenSSL,
+libclang) per runner; on Windows the vcpkg `libxml2` port is built with the
+`x64-windows-static-md` triplet.
 
 ## License
 

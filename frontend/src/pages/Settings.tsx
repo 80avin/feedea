@@ -6,8 +6,8 @@ import { useChangePassword, useSettings, useUpdateSettings } from "../state/hook
 import { ErrorState, LoadingState, formatError } from "../components/Feedback";
 import { ACCENTS } from "../theme/useTheme";
 
-const REPO_URL = "https://github.com/yourname/feedea";
-const ISSUES_URL = "https://github.com/yourname/feedea/issues";
+const REPO_URL = "https://github.com/80avin/feedea";
+const ISSUES_URL = "https://github.com/80avin/feedea/issues";
 
 const inputClass =
   "rounded-md border border-app-border-strong bg-app-surface px-3 py-2 text-sm text-app-text outline-none focus:border-accent";
