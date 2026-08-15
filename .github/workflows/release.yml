@@ -24,16 +24,12 @@ jobs:
           - os: windows-latest
             target: windows-x64
             artifact: feedea-windows-x64.exe
-            shell: pwsh
-          - os: macos-latest
+          - os: macos-15-arm64
             target: macos-arm64
             artifact: feedea-macos-arm64
-          - os: macos-13
+          - os: macos-15
             target: macos-x64
             artifact: feedea-macos-x64
-    defaults:
-      run:
-        shell: ${{ matrix.shell || 'bash' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -58,13 +54,14 @@ jobs:
         if: matrix.target == 'linux-x64'
         run: bash scripts/smoke.sh
 
-      - name: Rename binary
-        run: |
-          if [ "${{ matrix.shell }}" = "pwsh" ]; then
-            Copy-Item target/release/feedea.exe "${{ matrix.artifact }}"
-          else
-            cp target/release/feedea "${{ matrix.artifact }}"
-          fi
+      - name: Rename binary (unix)
+        if: runner.os != 'Windows'
+        run: cp target/release/feedea "${{ matrix.artifact }}"
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Copy-Item target/release/feedea.exe "${{ matrix.artifact }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
