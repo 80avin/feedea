@@ -120,7 +120,7 @@ the platform deps first:
 |----------------------|-----------------|
 | `ubuntu-latest`      | `sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libxml2-dev libclang-dev` |
 | `ubuntu-24.04-arm`   | same as ubuntu-latest |
-| `windows-latest`     | `vcpkg install libxml2` + `LIBCLANG_PATH` to the bundled LLVM (`C:\Program Files\LLVM\bin`) + `VCPKG_ROOT` |
+| `windows-latest`     | `vcpkg install libxml2 --triplet x64-windows-static-md` + `VCPKGRS_TRIPLET=x64-windows-static-md` + `LIBCLANG_PATH` to the bundled LLVM (`C:\Program Files\LLVM\bin`) + `VCPKG_ROOT` |
 | `macos-15-arm64`     | `brew install libxml2 openssl pkg-config` + `PKG_CONFIG_PATH` to brew libxml2 pkgconfig (libclang via Xcode CLT) |
 | `macos-15-intel`     | same as macos-15-arm64 |
 
