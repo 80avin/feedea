@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            artifact: feedea-linux-x64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+            artifact: feedea-linux-arm64
+          - os: windows-latest
+            target: windows-x64
+            artifact: feedea-windows-x64.exe
+          - os: macos-15-arm64
+            target: macos-arm64
+            artifact: feedea-macos-arm64
+          - os: macos-15
+            target: macos-x64
+            artifact: feedea-macos-x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: bun install
+
+      - name: Build frontend
+        working-directory: frontend
+        run: bun run build
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Smoke test (linux-x64 only)
+        if: matrix.target == 'linux-x64'
+        run: bash scripts/smoke.sh
+
+      - name: Rename binary (unix)
+        if: runner.os != 'Windows'
+        run: cp target/release/feedea "${{ matrix.artifact }}"
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Copy-Item target/release/feedea.exe "${{ matrix.artifact }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          draft: true
