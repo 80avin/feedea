@@ -13,6 +13,30 @@ Single Rust binary, embedded React frontend, SQLite storage. Built on the
 - Privacy-friendly image proxy (private-network proxying off by default)
 - PWA: installable, works offline after first load
 
+## Screenshots
+
+### Desktop
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/desktop-01-overview.png" alt="Overview" width="300"><br/>Overview</td>
+    <td align="center"><img src="docs/screenshots/desktop-02-feeds.png" alt="Feeds" width="300"><br/>Feeds</td>
+    <td align="center"><img src="docs/screenshots/desktop-03-reader.png" alt="Reader" width="300"><br/>Reader</td>
+    <td align="center"><img src="docs/screenshots/desktop-04-sources.png" alt="Sources" width="300"><br/>Sources</td>
+  </tr>
+</table>
+
+### Mobile
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/mobile-01-overview.png" alt="Overview" width="120"><br/>Overview</td>
+    <td align="center"><img src="docs/screenshots/mobile-02-feeds.png" alt="Feeds" width="120"><br/>Feeds</td>
+    <td align="center"><img src="docs/screenshots/mobile-03-reader.png" alt="Reader" width="120"><br/>Reader</td>
+    <td align="center"><img src="docs/screenshots/mobile-04-sources.png" alt="Sources" width="120"><br/>Sources</td>
+  </tr>
+</table>
+
 ## Requirements
 
 - Rust toolchain (stable) + `cargo`
