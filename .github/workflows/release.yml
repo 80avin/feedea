@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            artifact: feedea-linux-x64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+            artifact: feedea-linux-arm64
+          - os: windows-latest
+            target: windows-x64
+            artifact: feedea-windows-x64.exe
+            shell: pwsh
+          - os: macos-latest
+            target: macos-arm64
+            artifact: feedea-macos-arm64
+          - os: macos-13
+            target: macos-x64
+            artifact: feedea-macos-x64
+    defaults:
+      run:
+        shell: ${{ matrix.shell || 'bash' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: bun install
+
+      - name: Build frontend
+        working-directory: frontend
+        run: bun run build
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Smoke test (linux-x64 only)
+        if: matrix.target == 'linux-x64'
+        run: bash scripts/smoke.sh
+
+      - name: Rename binary
+        run: |
+          if [ "${{ matrix.shell }}" = "pwsh" ]; then
+            Copy-Item target/release/feedea.exe "${{ matrix.artifact }}"
+          else
+            cp target/release/feedea "${{ matrix.artifact }}"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -R artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          draft: true
