@@ -107,6 +107,8 @@ The crate graph requires system libraries beyond the Rust toolchain (verified
 from Cargo.lock):
 - `article_scraper` (news-flash default feature) → the `libxml` crate, which
   locates `libxml2` via `pkg-config` on unix and via **vcpkg** on Windows MSVC.
+- The `libxml` crate runs `bindgen` at build time, which requires **libclang**
+  (via the `clang-sys`/`libclang-sys` crate) on every platform.
 - reqwest's default `native-tls` → `openssl-sys`, which needs OpenSSL headers
   on Linux/macOS (auto-detects Homebrew on macOS); on Windows MSVC the
   `schannel` backend is used, so no OpenSSL is required there.
@@ -116,17 +118,18 @@ the platform deps first:
 
 | runner               | install command |
 |----------------------|-----------------|
-| `ubuntu-latest`      | `sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libxml2-dev` |
+| `ubuntu-latest`      | `sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libxml2-dev libclang-dev` |
 | `ubuntu-24.04-arm`   | same as ubuntu-latest |
-| `windows-latest`     | `vcpkg install libxml2` (and add the vcpkg root to `VCPKG_ROOT` if not already set) |
-| `macos-15-arm64`     | `brew install libxml2 openssl pkg-config` + `PKG_CONFIG_PATH` to brew libxml2 pkgconfig |
+| `windows-latest`     | `vcpkg install libxml2` + `LIBCLANG_PATH` to the bundled LLVM (`C:\Program Files\LLVM\bin`) + `VCPKG_ROOT` |
+| `macos-15-arm64`     | `brew install libxml2 openssl pkg-config` + `PKG_CONFIG_PATH` to brew libxml2 pkgconfig (libclang via Xcode CLT) |
 | `macos-15-intel`     | same as macos-15-arm64 |
 
 GitHub's ubuntu images already ship `pkg-config` and `libssl-dev` headers, but
-NOT `libxml2-dev` — the `libxml2-dev` package is the missing piece. macOS
-runner images have brew; `libxml2` (headers) is not installed by default.
-Windows runners have vcpkg preinstalled; the `libxml2` port is not built by
-default.
+NOT `libxml2-dev` or `libclang-dev` — both are missing pieces. macOS runner
+images have brew; `libxml2` (headers) is not installed by default, but libclang
+is available via the preinstalled Xcode Command Line Tools. Windows runners
+have vcpkg preinstalled (the `libxml2` port is not built by default) and ship
+LLVM, but `LIBCLANG_PATH` must point at it for `clang-sys`.
 
 Add an "Install system dependencies" step to every build/test job, gated by
 `runner.os` (or matrix), BEFORE the bun/cargo steps.

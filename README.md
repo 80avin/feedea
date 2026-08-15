@@ -42,7 +42,44 @@ Single Rust binary, embedded React frontend, SQLite storage. Built on the
 - Rust toolchain (stable) + `cargo`
 - [bun](https://bun.sh) for the frontend (used for both dev and build)
 
+### Build dependencies (system libraries)
+
+The build links against a few system libraries (via the news-flash engine and
+reqwest). You need these installed before `cargo build`:
+
+- **pkg-config** — build-time dependency probe
+- **OpenSSL headers** (`libssl-dev`) — Linux/macOS only (Windows uses SChannel)
+- **libxml2 headers** (`libxml2-dev`) — from the `libxml` crate (news-flash's
+  article scraper)
+- **libclang** (`libclang-dev`) — required by `bindgen`, which the `libxml`
+  crate runs at build time
+
+Install per platform:
+
+```sh
+# Debian / Ubuntu
+sudo apt-get install -y pkg-config libssl-dev libxml2-dev libclang-dev
+
+# macOS (Homebrew)
+brew install pkg-config openssl libxml2
+# libclang is provided by the Xcode Command Line Tools (xcode-select --install)
+
+# Windows (vcpkg) — then set the env vars below
+vcpkg install libxml2
+set LIBCLANG_PATH=C:\Program Files\LLVM\bin
+set VCPKG_ROOT=C:\vcpkg
+```
+
+On macOS, brew's libxml2 is keg-only, so also export its pkg-config path before
+building:
+
+```sh
+export PKG_CONFIG_PATH="$(brew --prefix libxml2)/lib/pkgconfig"
+```
+
 If bun is not on your PATH (e.g. installed via the bun installer into
+
+
 `~/.bun/bin`), add it:
 
 ```sh
