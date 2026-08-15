@@ -17,6 +17,8 @@ x64) on version tags.
 - Reproducible toolchain via a committed `rust-toolchain.toml` (stable).
 - Preserve the existing single-binary artifact: `bun run build` then
   `cargo build --release` (build.rs requires `frontend/dist`).
+- **Install the system build dependencies on each runner before `cargo`**
+  (verified: the crate graph requires them — see §6).
 
 ### Non-goals (v1)
 - Code signing (Windows/macOS), notarization, Homebrew cask, Docker images,
@@ -99,7 +101,37 @@ ubuntu-latest.
 - GPL-3.0-or-later (news-flash) — already noted in the README; release notes
   can mention it.
 
-## 6. Testing the workflows
+## 6. System build dependencies (per runner)
+
+The crate graph requires system libraries beyond the Rust toolchain (verified
+from Cargo.lock):
+- `article_scraper` (news-flash default feature) → the `libxml` crate, which
+  locates `libxml2` via `pkg-config` on unix and via **vcpkg** on Windows MSVC.
+- reqwest's default `native-tls` → `openssl-sys`, which needs OpenSSL headers
+  on Linux/macOS (auto-detects Homebrew on macOS); on Windows MSVC the
+  `schannel` backend is used, so no OpenSSL is required there.
+
+Consequently every `cargo build`/`cargo test`/`cargo clippy` job must install
+the platform deps first:
+
+| runner               | install command |
+|----------------------|-----------------|
+| `ubuntu-latest`      | `sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libxml2-dev` |
+| `ubuntu-24.04-arm`   | same as ubuntu-latest |
+| `windows-latest`     | `vcpkg install libxml2` (and add the vcpkg root to `VCPKG_ROOT` if not already set) |
+| `macos-15-arm64`     | `brew install libxml2 pkg-config` (openssl auto-detected from Homebrew) |
+| `macos-15`           | same as macos-15-arm64 |
+
+GitHub's ubuntu images already ship `pkg-config` and `libssl-dev` headers, but
+NOT `libxml2-dev` — the `libxml2-dev` package is the missing piece. macOS
+runner images have brew; `libxml2` (headers) is not installed by default.
+Windows runners have vcpkg preinstalled; the `libxml2` port is not built by
+default.
+
+Add an "Install system dependencies" step to every build/test job, gated by
+`runner.os` (or matrix), BEFORE the bun/cargo steps.
+
+## 7. Testing the workflows
 
 - CI workflow can be exercised by pushing to a branch + opening a PR (once the
   repo is on GitHub).
