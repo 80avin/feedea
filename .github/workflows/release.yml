@@ -4,13 +4,16 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -72,13 +75,12 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: List artifacts
-        run: ls -R artifacts
 
       - uses: softprops/action-gh-release@v2
         with:
