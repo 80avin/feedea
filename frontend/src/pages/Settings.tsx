@@ -5,7 +5,9 @@ import { useSession } from "../auth/useSession";
 import { useChangePassword, useSettings, useUpdateSettings } from "../state/hooks";
 import { ErrorState, LoadingState, formatError } from "../components/Feedback";
 import { ACCENTS } from "../theme/useTheme";
-import { ComputerDesktopIcon, MoonIcon, SunIcon } from "@heroicons/react/24/solid";
+import { ArrowLeftEndOnRectangleIcon, ComputerDesktopIcon, MoonIcon, SunIcon } from "@heroicons/react/24/solid";
+
+type InstallEvent = Event & { prompt: (() => Promise<void>) };
 
 const REPO_URL = "https://github.com/80avin/feedea";
 const ISSUES_URL = "https://github.com/80avin/feedea/issues";
@@ -51,6 +53,16 @@ export default function Settings() {
       setKeepDays(data.keep_articles_days === null ? "" : String(data.keep_articles_days));
     }
   }, [data, dirty]);
+
+  const [ installPrompt, setInstallPrompt ] = useState<null | InstallEvent>(null)
+  useEffect(() => {
+    const cb = (e: Event)  => {
+      e.preventDefault();
+      setInstallPrompt(e as InstallEvent)
+    };
+    window.addEventListener('beforeinstallprompt', cb);
+    return () => window.removeEventListener('beforeinstallprompt', cb);
+  }, []);
 
   const savePreferences = async () => {
     const patch: { theme?: string; accent?: string; sync_interval_minutes?: number; keep_articles_days?: number | null } = {};
@@ -255,6 +267,34 @@ export default function Settings() {
               </div>
             </section>
           )}
+
+          <section className="flex flex-col gap-3 rounded-lg border border-app-border p-4">
+            <p>Install to homescreen</p>
+            <Button isDisabled={!installPrompt} onClick={async () => {
+              const result = await installPrompt!.prompt()
+              console.log(result)
+            }}><ArrowLeftEndOnRectangleIcon /> Install</Button>
+            {/* TODO: check if http url, and warn */}
+            {!installPrompt && (
+              <>
+                <p>App not installable as PWA.</p>
+                <p>Possible reasons</p>
+                <ul>
+                  <li>App already installed</li>
+                  {window.location.protocol === "http:" && (
+                    <li>
+                      http: websites are not installable. If the host is private
+                      and known to be secure, configure{" "}
+                      <code>
+                        chrome://flags/#unsafely-treat-insecure-origin-as-secure
+                      </code>
+                    </li>
+                  )}
+                  <li>On mobile, check if the launcher supports PWA installation.</li>
+                </ul>
+              </>
+            )}
+          </section>
 
           <section className="flex flex-col gap-3 rounded-lg border border-app-border p-4">
             <h3 className="text-sm font-semibold">About</h3>
