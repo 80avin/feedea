@@ -119,8 +119,8 @@ the platform deps first:
 | `ubuntu-latest`      | `sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libxml2-dev` |
 | `ubuntu-24.04-arm`   | same as ubuntu-latest |
 | `windows-latest`     | `vcpkg install libxml2` (and add the vcpkg root to `VCPKG_ROOT` if not already set) |
-| `macos-15-arm64`     | `brew install libxml2 pkg-config` (openssl auto-detected from Homebrew) |
-| `macos-15`           | same as macos-15-arm64 |
+| `macos-15-arm64`     | `brew install libxml2 openssl pkg-config` + `PKG_CONFIG_PATH` to brew libxml2 pkgconfig |
+| `macos-15-intel`     | same as macos-15-arm64 |
 
 GitHub's ubuntu images already ship `pkg-config` and `libssl-dev` headers, but
 NOT `libxml2-dev` — the `libxml2-dev` package is the missing piece. macOS
