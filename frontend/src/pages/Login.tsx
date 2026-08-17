@@ -53,7 +53,7 @@ export default function Login() {
                 value={password}
                 autoFocus
                 aria-invalid={!!error}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setError(''); setPassword(e.target.value) }}
               />
               {error && <FieldError>{error}</FieldError>}
             </TextField>
