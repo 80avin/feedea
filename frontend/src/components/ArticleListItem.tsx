@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { useNavigate } from "react-router";
 import { encodeId } from "../api/client";
 import type { Headline } from "../api/types";
 import FeedContextMenu, { useFeedSummary } from "./FeedContextMenu";
 import { DeleteDialog, RenameDialog } from "./SourceMenu";
 import { useContextMenu } from "../hooks/useContextMenu";
 import { useArticlePath } from "../hooks/useArticlePath";
+import FeedNameLink from "./FeedNameLink";
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -18,13 +19,46 @@ export default function ArticleListItem({ item, hideFeed }: { item: Headline; hi
   const { position, close, menuRef, triggerProps } = useContextMenu();
   const feed = useFeedSummary(item.feed_id, item.feed_title ?? "");
   const articlePathFn = useArticlePath();
+  const navigate = useNavigate();
+
+  const openArticle = () => navigate(articlePathFn(item.id));
+  const openArticleNewTab = (e: React.MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      window.open(articlePathFn(item.id), "_blank", "noopener");
+    }
+  };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openArticle();
+    }
+  };
+
   return (
     <>
-      <Link to={articlePathFn(item.id)} className="block hover:bg-app-surface/60" {...triggerProps}>
+      <div
+        role="link"
+        tabIndex={0}
+        className="block cursor-pointer hover:bg-app-surface/60"
+        {...triggerProps}
+        onClick={(e) => {
+          if (triggerProps.onClick) triggerProps.onClick(e);
+          if (!e.isPropagationStopped()) openArticle();
+        }}
+        onAuxClick={openArticleNewTab}
+        onKeyDown={onKeyDown}
+      >
         <div className="flex items-start justify-between gap-3 py-2">
           <div className="min-w-0 flex-1">
             {item.title && <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>{item.title}</p>}
-            {!hideFeed && item.feed_title && <p className="truncate text-xs text-app-text-faint">{item.feed_title}</p>}
+            {!hideFeed && item.feed_title && (
+              <FeedNameLink
+                feedId={item.feed_id}
+                title={item.feed_title}
+                className="truncate text-xs text-app-text-faint hover:text-accent hover:underline"
+              />
+            )}
           </div>
           {item.thumbnail_url && !thumbFailed && (
             <img
@@ -40,7 +74,7 @@ export default function ArticleListItem({ item, hideFeed }: { item: Headline; hi
             <span className="whitespace-nowrap">{item.date ? formatDate(item.date) : ""}</span>
           </div>
         </div>
-      </Link>
+      </div>
       {position && (
         <FeedContextMenu
           feed={feed}

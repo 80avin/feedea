@@ -8,6 +8,7 @@ import SaveDialog from "./SaveDialog";
 import { useSelectedArticleId } from "../hooks/useSelectedArticleId";
 import { useArticle, useMarkRead } from "../state/hooks";
 import { formatAge } from "../utils/format";
+import FeedNameLink from "./FeedNameLink";
 
 const autoMarkedReadIds = new Set<string>();
 
@@ -74,7 +75,13 @@ export default function Reader() {
           {data.title && <h1 className="text-xl font-semibold leading-snug text-app-text">{data.title}</h1>}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-app-text-muted" data-reader-meta>
-          {data.feed_title && <span className="font-medium text-app-text-2">{data.feed_title}</span>}
+          {data.feed_title && (
+            <FeedNameLink
+              feedId={data.feed_id}
+              title={data.feed_title}
+              className="font-medium text-app-text-2 hover:text-accent hover:underline"
+            />
+          )}
           {data.author && <span>by {data.author}</span>}
           <span>{formatAge(data.date)}</span>
           <span>{new Date(data.date).toLocaleDateString()}</span>

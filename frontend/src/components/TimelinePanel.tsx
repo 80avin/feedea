@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { useNavigate } from "react-router";
 import type { Headline } from "../api/types";
 import { encodeId } from "../api/client";
 import { formatAge } from "../utils/format";
@@ -8,6 +8,7 @@ import FeedContextMenu, { useFeedSummary } from "./FeedContextMenu";
 import { DeleteDialog, RenameDialog } from "./SourceMenu";
 import { useContextMenu } from "../hooks/useContextMenu";
 import { useArticlePath } from "../hooks/useArticlePath";
+import FeedNameLink from "./FeedNameLink";
 
 function TimelineItem({ item }: { item: Headline }) {
   const [thumbFailed, setThumbFailed] = useState(false);
@@ -15,13 +16,35 @@ function TimelineItem({ item }: { item: Headline }) {
   const { position, close, menuRef, triggerProps } = useContextMenu();
   const feed = useFeedSummary(item.feed_id, item.feed_title ?? "");
   const articlePathFn = useArticlePath();
+  const navigate = useNavigate();
+
+  const openArticle = () => navigate(articlePathFn(item.id));
+  const openArticleNewTab = (e: React.MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      window.open(articlePathFn(item.id), "_blank", "noopener");
+    }
+  };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openArticle();
+    }
+  };
 
   return (
     <>
-      <Link
-        to={articlePathFn(item.id)}
-        className="block px-4 py-2 hover:bg-app-surface/60"
+      <div
+        role="link"
+        tabIndex={0}
+        className="block cursor-pointer px-4 py-2 hover:bg-app-surface/60"
         {...triggerProps}
+        onClick={(e) => {
+          if (triggerProps.onClick) triggerProps.onClick(e);
+          if (!e.isPropagationStopped()) openArticle();
+        }}
+        onAuxClick={openArticleNewTab}
+        onKeyDown={onKeyDown}
       >
         <div className="flex items-start gap-3">
           <FeedAvatar feedId={item.feed_id} title={item.feed_title} className="h-8 w-8" />
@@ -34,7 +57,13 @@ function TimelineItem({ item }: { item: Headline }) {
             <p className="truncate text-xs text-app-text-faint">
               {item.date ? formatAge(item.date) : ""}
               {item.date && item.feed_title ? " · " : ""}
-              {item.feed_title}
+              {item.feed_title && (
+                <FeedNameLink
+                  feedId={item.feed_id}
+                  title={item.feed_title}
+                  className="text-app-text-faint hover:text-accent hover:underline"
+                />
+              )}
             </p>
           </div>
           {item.thumbnail_url && !thumbFailed && (
@@ -47,7 +76,7 @@ function TimelineItem({ item }: { item: Headline }) {
             />
           )}
         </div>
-      </Link>
+      </div>
       {position && (
         <FeedContextMenu
           feed={feed}

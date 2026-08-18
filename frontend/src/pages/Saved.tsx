@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { useNavigate } from "react-router";
 import { PencilSquareIcon, BookmarkIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Chip } from "@heroui/react";
 import { useSaved, useUnsaveArticle } from "../state/hooks";
@@ -7,6 +7,7 @@ import { formatAge } from "../utils/format";
 import { ErrorState, LoadingState } from "../components/Feedback";
 import SaveDialog from "../components/SaveDialog";
 import { useArticlePath } from "../hooks/useArticlePath";
+import FeedNameLink from "../components/FeedNameLink";
 
 function monthLabel(month: string): string {
   const [year, m] = month.split("-").map(Number);
@@ -19,6 +20,7 @@ function monthLabel(month: string): string {
 export default function Saved() {
   const { data, isLoading, isError, error, refetch } = useSaved();
   const unsave = useUnsaveArticle();
+  const navigate = useNavigate();
   const [editId, setEditId] = useState<string | null>(null);
   const articlePathFn = useArticlePath();
 
@@ -40,8 +42,25 @@ export default function Saved() {
               <ul className="divide-y divide-app-border/60">
                 {group.items.map((item) => (
                   <li key={item.id} className="py-2">
-                    <div className="flex items-start gap-2">
-                      <Link to={articlePathFn(item.id)} className="group min-w-0 flex-1">
+                    <div
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => navigate(articlePathFn(item.id))}
+                      onAuxClick={(e) => {
+                        if (e.button === 1) {
+                          e.preventDefault();
+                          window.open(articlePathFn(item.id), "_blank", "noopener");
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          navigate(articlePathFn(item.id));
+                        }
+                      }}
+                      className="flex cursor-pointer items-start gap-2"
+                    >
+                      <div className="min-w-0 flex-1">
                         {item.title && (
                           <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>
                             {item.title}
@@ -50,7 +69,13 @@ export default function Saved() {
                         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-app-text-faint">
                           {item.date && <span>{formatAge(item.date)}</span>}
                           {item.date && item.feed_title && <span aria-hidden="true">·</span>}
-                          {item.feed_title && <span className="truncate">{item.feed_title}</span>}
+                          {item.feed_title && (
+                            <FeedNameLink
+                              feedId={item.feed_id}
+                              title={item.feed_title}
+                              className="truncate hover:text-accent hover:underline"
+                            />
+                          )}
                         </p>
                         {item.note && (
                           <p className="mt-1 line-clamp-2 text-xs text-app-text-muted">{item.note}</p>
@@ -62,12 +87,15 @@ export default function Saved() {
                             ))}
                           </div>
                         )}
-                      </Link>
+                      </div>
                       <div className="flex shrink-0 items-center gap-1">
                         <button
                           type="button"
                           aria-label="Edit note and tags"
-                          onClick={() => setEditId(item.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditId(item.id);
+                          }}
                           className="rounded-md p-1.5 text-app-text-muted hover:bg-app-hover hover:text-app-text"
                         >
                           <PencilSquareIcon className="h-4 w-4" />
@@ -75,7 +103,10 @@ export default function Saved() {
                         <button
                           type="button"
                           aria-label="Unsave"
-                          onClick={() => unsave.mutate({ id: item.id })}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            unsave.mutate({ id: item.id });
+                          }}
                           className="rounded-md p-1.5 text-app-text-muted hover:bg-app-hover hover:text-red-500 dark:hover:text-red-400"
                         >
                           <XMarkIcon className="h-4 w-4" />
