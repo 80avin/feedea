@@ -268,15 +268,22 @@ pub async fn import_opml(
                     }
                 }
                 ConflictKind::UrlIdentical => {
-                    let existing_id = &conflict.matches[0].id;
-                    if conflict.opml.title != conflict.matches[0].title {
+                    // matches[0] may be a url-variant duplicate of the id-match feed;
+                    // always act on the feed whose id equals the opml url (classify
+                    // guarantees it is in matches, since this branch requires an id match)
+                    let existing_id = conflict
+                        .matches
+                        .iter()
+                        .find(|m| m.id == conflict.opml.url)
+                        .expect("url-identical conflict always contains the id-match feed");
+                    if conflict.opml.title != existing_id.title {
                         state
                             .engine
-                            .rename_feed(existing_id, &conflict.opml.title)
+                            .rename_feed(&existing_id.id, &conflict.opml.title)
                             .await?;
                     }
                     if !conflict.opml.category.is_empty()
-                        && conflict.opml.category != conflict.matches[0].category
+                        && conflict.opml.category != existing_id.category
                     {
                         let (categories, _) = state.engine.get_categories().await?;
                         let category_id = categories
@@ -284,11 +291,15 @@ pub async fn import_opml(
                             .find(|c| c.label == conflict.opml.category)
                             .map(|c| c.category_id.as_str().to_string())
                             .unwrap_or_else(|| {
-                                // unreachable: cleaned opml keeps the category outline, so it exists
+                                // when added == 0 the cleaned opml is never imported, so a
+                                // brand-new category was never created and the move no-ops
                                 String::new()
                             });
                         if !category_id.is_empty() {
-                            state.engine.move_feed(existing_id, &category_id).await?;
+                            state
+                                .engine
+                                .move_feed(&existing_id.id, &category_id)
+                                .await?;
                         }
                     }
                 }
