@@ -36,7 +36,9 @@ Resolution   = { key: number, action: "keep-new" | "keep-existing" | "skip",
   - `url-variant`: normalized URL matches an existing feed but the string differs. `keep-new` = import the new feed (new id = xml_url string), migrate the existing feed's articles (`UPDATE articles SET feed_id = new WHERE feed_id = old`), then remove the old feed.
   - `intra-file`: same normalized URL appears earlier in the file. `keep-new` = this occurrence's title/category win in the cleaned OPML; default `keep-existing` = first occurrence wins.
 - Feeds with id prefix `__file__:` are synthetic intra-file matches (never migrate/remove them).
-- URL normalization: lowercase scheme + host, keep explicit port, strip trailing `/`, strip fragment, keep query.
+- URL normalization: lowercase scheme + host, keep explicit port, strip trailing `/`, strip fragment, keep query. Note: `http` and `https` remain **different** schemes (only the scheme string is lowercased).
+- Classification precedence per entry: existing-feed match wins over intra-file. `url-identical` (raw xml_url == an existing id) → `url-variant` (normalized match) → `intra-file` (duplicate of an earlier file URL, no existing match) → `new`.
+- Existing feeds in the toplevel category (`category_id == "NewsFlash.Toplevel"`) are exposed to the frontend with `category: ""`, matching an OPML feed with no category outline, so exact duplicates in the toplevel are detected as skips rather than conflicts.
 
 ---
 
@@ -81,7 +83,7 @@ mod tests {
       <outline text="Feed A" title="Feed A" type="rss" xmlUrl="https://example.com/feed.xml"/>
       <outline text="Feed A Again" title="Feed A Again" type="rss" xmlUrl="https://example.com/feed.xml/"/>
     </outline>
-    <outline text="Feed B" title="Feed B" type="rss" xmlUrl="https://example.org/b"/>
+    <outline text="Feed B" title="Feed B" type="rss" xmlUrl="http://example.org/b/"/>
   </body>
 </opml>"#;
 
@@ -139,15 +141,34 @@ mod tests {
         assert_eq!(c.new_count, 0);
         assert_eq!(c.exact_duplicates, 0);
         // entry 0: url-identical (id == url, title differs)
-        // entry 1: intra-file (same normalized url as entry 0)
-        // entry 2: url-variant (http vs https, normalized equal)
+        // entry 1: url-variant (trailing-slash variant of Feed A's url)
+        // entry 2: url-variant (trailing-slash variant of Feed B's url)
         let kinds: Vec<ConflictKind> = c.conflicts.iter().map(|x| x.kind).collect();
         assert!(kinds.contains(&ConflictKind::UrlIdentical));
-        assert!(kinds.contains(&ConflictKind::IntraFile));
         assert!(kinds.contains(&ConflictKind::UrlVariant));
         let b = c.conflicts.iter().find(|x| x.key == 2).unwrap();
         assert_eq!(b.matches[0].id, "http://example.org/b");
         assert_eq!(b.kind, ConflictKind::UrlVariant);
+    }
+
+    #[test]
+    fn classifies_intra_file_conflict_when_title_differs() {
+        let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="First" title="First" type="rss" xmlUrl="https://example.com/dup"/>
+    <outline text="Second" title="Second" type="rss" xmlUrl="https://example.com/dup/"/>
+  </body>
+</opml>"#;
+        let entries = parse_entries(opml).unwrap();
+        let c = classify(&entries, &[]);
+        assert_eq!(c.new_count, 1);
+        let conflict = c.conflicts.iter().find(|x| x.key == 1).unwrap();
+        assert_eq!(conflict.kind, ConflictKind::IntraFile);
+        assert_eq!(conflict.matches.len(), 1);
+        assert_eq!(conflict.matches[0].id, "__file__:0");
+        assert_eq!(conflict.matches[0].title, "First");
+        assert_eq!(c.exact_duplicates, 0);
     }
 
     #[test]
@@ -157,7 +178,8 @@ mod tests {
         // entry 0 matches Feed A exactly -> skipped
         assert_eq!(c.exact_duplicates, 1);
         assert!(c.skipped.contains(&0));
-        // entry 1: intra-file (different title), entry 2: url-variant
+        // entry 1: url-variant (trailing-slash variant of Feed A's url, matches Feed A)
+        // entry 2: url-variant (trailing-slash variant of Feed B's url, matches Feed B)
         assert_eq!(c.conflicts.len(), 2);
         assert_eq!(c.new_count, 0);
     }
@@ -417,17 +439,40 @@ fn build_cleaned_opml_drops_exact_dups_keeps_resolved() {
     let opml = OPML.to_string();
     let entries = parse_entries(&opml).unwrap();
     let classification = classify(&entries, &existing());
-    // entry 0 is an exact duplicate (skipped). Entries 1 (intra-file) and 2 (url-variant) are conflicts.
+    // entry 0 is an exact duplicate (skipped). Entries 1 and 2 are url-variant conflicts.
     let resolutions = vec![
         Resolution { key: 1, action: ResolutionAction::KeepExisting, keep_existing_feed_id: None },
         Resolution { key: 2, action: ResolutionAction::KeepNew, keep_existing_feed_id: None },
     ];
     let (cleaned, added) = build_cleaned_opml(&opml, &entries, &classification, &resolutions).unwrap();
-    assert_eq!(added, 2); // entry 1 dropped (keep-existing), entry 2 kept (keep-new), entry 0 skipped
+    assert_eq!(added, 1); // entry 1 dropped (keep-existing), entry 2 kept (keep-new), entry 0 skipped
     let cleaned_entries = parse_entries(&cleaned).unwrap();
-    assert_eq!(cleaned_entries.len(), 2);
+    assert_eq!(cleaned_entries.len(), 1);
     assert!(cleaned_entries.iter().all(|e| e.url != "https://example.com/feed.xml"));
-    assert!(cleaned_entries.iter().any(|e| e.url == "https://example.org/b"));
+    assert!(cleaned_entries.iter().any(|e| e.url == "http://example.org/b/"));
+}
+
+#[test]
+fn build_cleaned_opml_intra_file_keep_new_prefers_later_occurrence() {
+    use crate::engine::opml_import::*;
+    let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="First" title="First" type="rss" xmlUrl="https://example.com/dup"/>
+    <outline text="Second" title="Second" type="rss" xmlUrl="https://example.com/dup/"/>
+  </body>
+</opml>"#;
+    let entries = parse_entries(opml).unwrap();
+    let classification = classify(&entries, &[]);
+    // intra-file conflict at key 1; keep-new -> the later occurrence wins that url
+    let resolutions = vec![
+        Resolution { key: 1, action: ResolutionAction::KeepNew, keep_existing_feed_id: None },
+    ];
+    let (cleaned, added) = build_cleaned_opml(opml, &entries, &classification, &resolutions).unwrap();
+    assert_eq!(added, 1);
+    let cleaned_entries = parse_entries(&cleaned).unwrap();
+    assert_eq!(cleaned_entries.len(), 1);
+    assert_eq!(cleaned_entries[0].title, "Second");
 }
 ```
 
@@ -726,10 +771,16 @@ pub async fn import_opml(
             title: f.title.clone(),
             url: f.feed_url.clone(),
             website: f.website.clone(),
-            category: name_by_id
-                .get(&f.category_id)
-                .cloned()
-                .unwrap_or_else(|| f.category_id.clone()),
+            category: if f.category_id == "NewsFlash.Toplevel" {
+                // OPML feeds with no category outline have category ""; exposing the
+                // toplevel id would turn perfect duplicates into false url-identical conflicts.
+                String::new()
+            } else {
+                name_by_id
+                    .get(&f.category_id)
+                    .cloned()
+                    .unwrap_or_else(|| f.category_id.clone())
+            },
         })
         .collect();
 
@@ -800,11 +851,16 @@ pub async fn import_opml(
                         if matched.id.starts_with("__file__:") {
                             continue;
                         }
-                        migrated += opml_import::migrate_feed_articles(
-                            &db_path,
-                            &matched.id,
-                            &conflict.opml.url,
-                        )?;
+                        // run the direct-SQLite migration under the engine's mutation lock
+                        // (it would deadlock if held across remove_feed, which takes the same lock)
+                        {
+                            let _guard = state.engine.mutation_guard().await;
+                            migrated += opml_import::migrate_feed_articles(
+                                &db_path,
+                                &matched.id,
+                                &conflict.opml.url,
+                            )?;
+                        }
                         state.engine.remove_feed(&matched.id).await?;
                         skipped += 1;
                     }
@@ -1158,11 +1214,17 @@ At line 43, use the hook: `to={articlePathFn(item.id)}`. (Keeps `encodeId` impor
 
 - [ ] **Step 6: Apply in `SearchBar.tsx`**
 
-At line 77, preserve the query params when navigating to a suggestion:
+At line 77, preserve the query params when navigating to a suggestion **only when already on a `/feeds*` route** (per spec; elsewhere the current page's params are unrelated to the feed list):
+
 ```ts
-navigate(articlePath(id, new URLSearchParams(location.search)));
+navigate(
+  location.pathname.startsWith("/feeds")
+    ? articlePath(id, new URLSearchParams(location.search))
+    : `/feeds/${encodeId(id)}`,
+);
 ```
-Add `const location = useLocation();` and import `articlePath` from `../utils/articleLink`.
+
+Add `const location = useLocation();` and import `articlePath` from `../utils/articleLink`. Add `useLocation` to the existing `react-router` import at line 2.
 
 - [ ] **Step 7: Verify**
 
@@ -1313,7 +1375,85 @@ Apply the same pattern as Step 2 (outer div `role="link"` + `onClick`/`onAuxClic
 
 - [ ] **Step 4: Restructure `Saved.tsx` rows**
 
-`Saved.tsx` renders its own rows (lines 42-84). The outer `Link` (line 43) becomes a clickable div (same pattern), the title stays, the feed title span (line 52) becomes `FeedNameLink`. The action buttons (Edit/Unsave) remain siblings on the right; wrap each in `onClick={(e) => e.stopPropagation()}` so they don't trigger row navigation (they're already separate — add stopPropagation to be safe). Keep the `Link` import only if still used.
+`Saved.tsx` renders its own rows (lines 39-86) inline. The outer `Link` (line 43) becomes a clickable div (same pattern as `TimelineItem`), the feed title span (line 52) becomes `FeedNameLink`, and the Edit/Unsave buttons get `e.stopPropagation()`. Replace the `<li>...</li>` block (currently lines 40-85) with:
+
+```tsx
+<li key={item.id} className="py-2">
+  <div
+    role="link"
+    tabIndex={0}
+    onClick={() => navigate(articlePathFn(item.id))}
+    onAuxClick={(e) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        window.open(articlePathFn(item.id), "_blank", "noopener");
+      }
+    }}
+    onKeyDown={(e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        navigate(articlePathFn(item.id));
+      }
+    }}
+    className="flex cursor-pointer items-start gap-2"
+  >
+    <div className="min-w-0 flex-1">
+      {item.title && (
+        <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>
+          {item.title}
+        </p>
+      )}
+      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-app-text-faint">
+        {item.date && <span>{formatAge(item.date)}</span>}
+        {item.date && item.feed_title && <span aria-hidden="true">·</span>}
+        {item.feed_title && (
+          <FeedNameLink
+            feedId={item.feed_id}
+            title={item.feed_title}
+            className="truncate hover:text-accent hover:underline"
+          />
+        )}
+      </p>
+      {item.note && (
+        <p className="mt-1 line-clamp-2 text-xs text-app-text-muted">{item.note}</p>
+      )}
+      {item.tags && item.tags.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          {item.tags.map((tag) => (
+            <Chip key={tag} size="sm" variant="soft">{tag}</Chip>
+          ))}
+        </div>
+      )}
+    </div>
+    <div className="flex shrink-0 items-center gap-1">
+      <button
+        type="button"
+        aria-label="Edit note and tags"
+        onClick={(e) => {
+          e.stopPropagation();
+          setEditId(item.id);
+        }}
+        className="rounded-md p-1.5 text-app-text-muted hover:bg-app-hover hover:text-app-text"
+      >
+        <PencilSquareIcon className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="Unsave"
+        onClick={(e) => {
+          e.stopPropagation();
+          unsave.mutate({ id: item.id });
+        }}
+        className="rounded-md p-1.5 text-app-text-muted hover:bg-app-hover hover:text-red-500 dark:hover:text-red-400"
+      >
+        <XMarkIcon className="h-4 w-4" />
+      </button>
+    </div>
+  </div>
+</li>
+```
+
+Add `const navigate = useNavigate();` and `const articlePathFn = useArticlePath();` inside `Saved` (next to `unsave`). Imports to update in `Saved.tsx`: add `useNavigate` to the `react-router` import; add `useArticlePath` from `../hooks/useArticlePath`; add `FeedNameLink` from `../components/FeedNameLink`; remove `encodeId` if no longer used (it is only used in the old `Link`), and remove `Link` if unused elsewhere (it is not — remove it). The Edit/Unsave buttons keep their labels/aria.
 
 - [ ] **Step 5: Reader meta feed link**
 
@@ -1575,7 +1715,7 @@ function FeedLink({ feed }: { feed: FeedSummary }) {
     <>
       <Link
         to={`/feeds?feed=${encodeURIComponent(feed.id)}`}
-        className={/* existing computed className */}
+        className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors text-app-text-muted hover:bg-app-hover/60 hover:text-app-text"
         {...triggerProps}
       >
         <span className="truncate">{feed.title}</span>
@@ -1634,7 +1774,7 @@ git commit -m "feat(frontend): article context menu and sidebar source menu"
 
 In `Sidebar.tsx`:
 
-(a) Add a hook near the top (below the imports):
+(a) Add a hook near the top (below the imports). Add `useSearchParams` to the existing `react-router` import at line 3 (`import { Link, NavLink, useLocation, useSearchParams } from "react-router"`):
 
 ```tsx
 function useFeedsFilter(): { feed: string | null; category: string | null } {
@@ -2020,15 +2160,180 @@ export default function OpmlConflictDialog({
 
 - [ ] **Step 4: Wire into `OpmlButtons.tsx` and `OpmlImportButton.tsx`**
 
-Both components currently call `importOpml.mutateAsync({ opml })` and expect a boolean/immediate success. Change the flow to:
+Both components currently call `importOpml.mutateAsync({ opml })` and expect immediate success. Both now: read the file → `mutateAsync({ opml })` → if `result.status === "conflicts"`, open the dialog; else show a summary. They share the dialog and the summary text. Replace the whole file contents:
 
-1. Read the file, call `const result = await importOpml.mutateAsync({ opml })`.
-2. If `result.status === "conflicts"`, store `{ opml, conflicts: result.conflicts }` in local state and render `<OpmlConflictDialog ... onImported={(r) => showSummary(r)} />`.
-3. If `result.status === "imported"`, show a short summary line: `Imported {added} feed(s), skipped {skipped} duplicate(s)` (+ `, migrated {migrated}` when > 0).
+`frontend/src/components/OpmlButtons.tsx`:
+```tsx
+import { useRef, useState } from "react";
+import { Button } from "@heroui/react";
+import { ArrowDownTrayIcon, ArrowUpTrayIcon } from "@heroicons/react/24/outline";
+import { useExportOpml, useImportOpml } from "../state/hooks";
+import { formatError } from "./Feedback";
+import type { ImportOpmlResponse, OpmlConflict } from "../api/types";
+import OpmlConflictDialog from "./OpmlConflictDialog";
 
-Create a tiny shared `OpmlImportSummary` inline (a `<p>` next to the buttons) or reuse existing button feedback patterns. The dialog is shared — both components render the same `<OpmlConflictDialog>`.
+function summaryText(result: ImportOpmlResponse): string {
+  const migrated = (result.migrated ?? 0) > 0 ? `, migrated ${result.migrated}` : "";
+  return `Imported ${result.added} feed(s), skipped ${result.skipped} duplicate(s)${migrated}`;
+}
 
-Read the current contents of both files before editing to match their exact structure. Both already handle file reading; only the response handling changes.
+export default function OpmlButtons() {
+  const importOpml = useImportOpml();
+  const exportOpml = useExportOpml();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState("");
+  const [conflictState, setConflictState] = useState<{ opml: string; conflicts: OpmlConflict[] } | null>(null);
+
+  const onFile = async (file: File | null) => {
+    if (!file) return;
+    setStatus("");
+    try {
+      const text = await file.text();
+      const result = await importOpml.mutateAsync({ opml: text });
+      if (result.status === "conflicts") {
+        setConflictState({ opml: text, conflicts: result.conflicts ?? [] });
+      } else {
+        setStatus(summaryText(result));
+      }
+    } catch (e) {
+      setStatus(formatError(e));
+    }
+  };
+
+  const onExport = async () => {
+    setStatus("");
+    try {
+      const xml = await exportOpml.mutateAsync();
+      const blob = new Blob([xml], { type: "text/xml" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "feedea-subscriptions.opml";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setStatus("Exported");
+    } catch (e) {
+      setStatus(formatError(e));
+    }
+  };
+
+  return (
+    <div className="relative flex flex-wrap items-center gap-2">
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".opml,.xml,text/xml,application/xml"
+        className="hidden"
+        onChange={(e) => {
+          void onFile(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+      />
+      <Button size="sm" variant="secondary" onPress={() => fileRef.current?.click()} isDisabled={importOpml.isPending}>
+        <ArrowUpTrayIcon className="h-4 w-4" />
+        Import
+      </Button>
+      <Button size="sm" variant="secondary" onPress={onExport} isDisabled={exportOpml.isPending}>
+        <ArrowDownTrayIcon className="h-4 w-4" />
+        Export
+      </Button>
+      {status && (
+        <span className="absolute right-0 top-full z-10 mt-1 max-w-48 truncate rounded-md border border-app-border bg-app-bg px-2 py-1 text-xs text-app-text-faint shadow-lg">
+          {status}
+        </span>
+      )}
+      {conflictState && (
+        <OpmlConflictDialog
+          open
+          opml={conflictState.opml}
+          conflicts={conflictState.conflicts}
+          onClose={() => setConflictState(null)}
+          onImported={(result) => setStatus(summaryText(result))}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+`frontend/src/components/OpmlImportButton.tsx`:
+```tsx
+import { useRef, useState } from "react";
+import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
+import { useImportOpml } from "../state/hooks";
+import { formatError } from "./Feedback";
+import type { ImportOpmlResponse, OpmlConflict } from "../api/types";
+import OpmlConflictDialog from "./OpmlConflictDialog";
+
+function summaryText(result: ImportOpmlResponse): string {
+  const migrated = (result.migrated ?? 0) > 0 ? `, migrated ${result.migrated}` : "";
+  return `Imported ${result.added} feed(s), skipped ${result.skipped} duplicate(s)${migrated}`;
+}
+
+export default function OpmlImportButton({ className }: { className?: string }) {
+  const importOpml = useImportOpml();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState("");
+  const [conflictState, setConflictState] = useState<{ opml: string; conflicts: OpmlConflict[] } | null>(null);
+
+  const onFile = async (file: File | null) => {
+    if (!file) return;
+    setStatus("");
+    try {
+      const text = await file.text();
+      const result = await importOpml.mutateAsync({ opml: text });
+      if (result.status === "conflicts") {
+        setConflictState({ opml: text, conflicts: result.conflicts ?? [] });
+      } else {
+        setStatus(summaryText(result));
+      }
+    } catch (e) {
+      setStatus(formatError(e));
+    }
+  };
+
+  return (
+    <span className={`relative ${className ?? ""}`}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".opml,.xml,text/xml,application/xml"
+        className="hidden"
+        onChange={(e) => {
+          void onFile(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        aria-label="Import OPML"
+        title="Import OPML"
+        onClick={() => fileRef.current?.click()}
+        disabled={importOpml.isPending}
+        className="flex items-center justify-center rounded-md p-1.5 text-app-text-muted transition-colors hover:bg-app-hover/60 hover:text-app-text disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <ArrowUpTrayIcon className="h-4 w-4" />
+      </button>
+      {status && (
+        <span className="absolute right-0 top-full z-10 mt-1 max-w-48 truncate rounded-md border border-app-border bg-app-bg px-2 py-1 text-xs text-app-text-faint shadow-lg">
+          {status}
+        </span>
+      )}
+      {conflictState && (
+        <OpmlConflictDialog
+          open
+          opml={conflictState.opml}
+          conflicts={conflictState.conflicts}
+          onClose={() => setConflictState(null)}
+          onImported={(result) => setStatus(summaryText(result))}
+        />
+      )}
+    </span>
+  );
+}
+```
 
 - [ ] **Step 5: Verify**
 
