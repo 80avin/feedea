@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { Input } from "@heroui/react";
 import { encodeId } from "../api/client";
 import { useDebounce } from "../hooks/useDebounce";
 import { useSuggestions } from "../state/hooks";
+import { articlePath } from "../utils/articleLink";
 import SearchSuggestions from "./SearchSuggestions";
 
 export default function SearchBar() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const currentQ = searchParams.get("q") ?? "";
   const [value, setValue] = useState(currentQ);
   const [open, setOpen] = useState(false);
@@ -74,7 +76,11 @@ export default function SearchBar() {
           suggestions={suggestions}
           onSelect={(id) => {
             setOpen(false);
-            navigate(`/feeds/${encodeId(id)}`);
+            navigate(
+              location.pathname.startsWith("/feeds")
+                ? articlePath(id, new URLSearchParams(location.search))
+                : `/feeds/${encodeId(id)}`,
+            );
           }}
         />
       )}

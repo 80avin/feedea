@@ -5,6 +5,7 @@ import type { Headline } from "../api/types";
 import FeedContextMenu, { useFeedSummary } from "./FeedContextMenu";
 import { DeleteDialog, RenameDialog } from "./SourceMenu";
 import { useContextMenu } from "../hooks/useContextMenu";
+import { useArticlePath } from "../hooks/useArticlePath";
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -16,9 +17,10 @@ export default function ArticleListItem({ item, hideFeed }: { item: Headline; hi
   const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
   const { position, close, menuRef, triggerProps } = useContextMenu();
   const feed = useFeedSummary(item.feed_id, item.feed_title ?? "");
+  const articlePathFn = useArticlePath();
   return (
     <>
-      <Link to={`/feeds/${encodeId(item.id)}`} className="block hover:bg-app-surface/60" {...triggerProps}>
+      <Link to={articlePathFn(item.id)} className="block hover:bg-app-surface/60" {...triggerProps}>
         <div className="flex items-start justify-between gap-3 py-2">
           <div className="min-w-0 flex-1">
             {item.title && <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>{item.title}</p>}

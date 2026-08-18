@@ -3,10 +3,10 @@ import { Link } from "react-router";
 import { PencilSquareIcon, BookmarkIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Chip } from "@heroui/react";
 import { useSaved, useUnsaveArticle } from "../state/hooks";
-import { encodeId } from "../api/client";
 import { formatAge } from "../utils/format";
 import { ErrorState, LoadingState } from "../components/Feedback";
 import SaveDialog from "../components/SaveDialog";
+import { useArticlePath } from "../hooks/useArticlePath";
 
 function monthLabel(month: string): string {
   const [year, m] = month.split("-").map(Number);
@@ -20,6 +20,7 @@ export default function Saved() {
   const { data, isLoading, isError, error, refetch } = useSaved();
   const unsave = useUnsaveArticle();
   const [editId, setEditId] = useState<string | null>(null);
+  const articlePathFn = useArticlePath();
 
   return (
     <div className="flex h-full flex-col p-4">
@@ -40,7 +41,7 @@ export default function Saved() {
                 {group.items.map((item) => (
                   <li key={item.id} className="py-2">
                     <div className="flex items-start gap-2">
-                      <Link to={`/feeds/${encodeId(item.id)}`} className="group min-w-0 flex-1">
+                      <Link to={articlePathFn(item.id)} className="group min-w-0 flex-1">
                         {item.title && (
                           <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>
                             {item.title}

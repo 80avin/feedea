@@ -7,17 +7,19 @@ import FeedAvatar from "./FeedAvatar";
 import FeedContextMenu, { useFeedSummary } from "./FeedContextMenu";
 import { DeleteDialog, RenameDialog } from "./SourceMenu";
 import { useContextMenu } from "../hooks/useContextMenu";
+import { useArticlePath } from "../hooks/useArticlePath";
 
 function TimelineItem({ item }: { item: Headline }) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
   const { position, close, menuRef, triggerProps } = useContextMenu();
   const feed = useFeedSummary(item.feed_id, item.feed_title ?? "");
+  const articlePathFn = useArticlePath();
 
   return (
     <>
       <Link
-        to={`/feeds/${encodeId(item.id)}`}
+        to={articlePathFn(item.id)}
         className="block px-4 py-2 hover:bg-app-surface/60"
         {...triggerProps}
       >
