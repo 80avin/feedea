@@ -8,7 +8,7 @@ export default function MobileLayout() {
   const isReader = !!articleId;
 
   return (
-    <div className="flex h-screen flex-col lg:hidden">
+    <div className="flex h-dvh flex-col lg:hidden">
       <main className="min-h-0 flex-1 overflow-y-auto">
         {isReader ? <ReaderPanel /> : <Outlet />}
       </main>
