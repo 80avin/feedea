@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import { useState } from "react";
-import { Link, NavLink, useLocation } from "react-router";
+import { Link, NavLink, useLocation, useSearchParams } from "react-router";
 import { Button, Separator } from "@heroui/react";
 import {
   BookmarkIcon,
@@ -24,6 +24,14 @@ import AddSourceDialog from "./AddSourceDialog";
 import OpmlImportButton from "./OpmlImportButton";
 
 type Icon = ComponentType<{ className?: string }>;
+
+function useFeedsFilter(): { feed: string | null; category: string | null } {
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const onFeeds = location.pathname === "/feeds" || location.pathname.startsWith("/feeds/");
+  if (!onFeeds) return { feed: null, category: null };
+  return { feed: searchParams.get("feed"), category: searchParams.get("category") };
+}
 
 interface NavItemProps {
   to: string;
@@ -95,17 +103,19 @@ function IconButton({
 }
 
 function TreeLink({ node, depth }: { node: CategoryNode; depth: number }) {
+  const { feed, category } = useFeedsFilter();
+  const active = !feed && category === node.category_id;
   return (
     <li>
-      <NavLink
+      <Link
         to={`/feeds?category=${encodeURIComponent(node.category_id)}`}
-        className={({ isActive }) =>
-          clsx(
-            "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-            depth > 0 && "ml-3",
-            isActive ? "bg-accent-soft text-accent-soft-foreground" : "text-app-text-muted hover:bg-app-hover/60 hover:text-app-text",
-          )
-        }
+        className={clsx(
+          "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+          depth > 0 && "ml-3",
+          active
+            ? "border-l-2 border-accent bg-accent-soft text-accent-soft-foreground"
+            : "text-app-text-muted hover:bg-app-hover/60 hover:text-app-text",
+        )}
       >
         <span className="truncate">{node.name}</span>
         {node.unread_count > 0 && (
@@ -113,7 +123,7 @@ function TreeLink({ node, depth }: { node: CategoryNode; depth: number }) {
             {node.unread_count}
           </span>
         )}
-      </NavLink>
+      </Link>
       {node.children.length > 0 && (
         <ul className="mt-0.5 flex flex-col gap-0.5">
           {node.children.map((child) => (
@@ -128,16 +138,18 @@ function TreeLink({ node, depth }: { node: CategoryNode; depth: number }) {
 function FeedLink({ feed }: { feed: FeedSummary }) {
   const { position, close, menuRef, triggerProps } = useContextMenu();
   const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
+  const { feed: activeFeedId } = useFeedsFilter();
+  const active = activeFeedId === feed.id;
   return (
     <>
-      <NavLink
+      <Link
         to={`/feeds?feed=${encodeURIComponent(feed.id)}`}
-        className={({ isActive }) =>
-          clsx(
-            "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-            isActive ? "bg-accent-soft text-accent-soft-foreground" : "text-app-text-muted hover:bg-app-hover/60 hover:text-app-text",
-          )
-        }
+        className={clsx(
+          "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+          active
+            ? "border-l-2 border-accent bg-accent-soft text-accent-soft-foreground"
+            : "text-app-text-muted hover:bg-app-hover/60 hover:text-app-text",
+        )}
         {...triggerProps}
       >
         <span className="truncate">{feed.title}</span>
@@ -146,7 +158,7 @@ function FeedLink({ feed }: { feed: FeedSummary }) {
             {feed.unread_count}
           </span>
         )}
-      </NavLink>
+      </Link>
       {position && (
         <FeedContextMenu
           feed={feed}
@@ -170,6 +182,7 @@ export default function Sidebar() {
   const { data: categoriesData } = useCategories();
   const { data: sourcesData } = useSources();
   const feedsActive = pathname.startsWith("/feeds");
+  const { feed, category } = useFeedsFilter();
   const [addSourceOpen, setAddSourceOpen] = useState(false);
   const [addCategoryOpen, setAddCategoryOpen] = useState(false);
 
@@ -199,7 +212,12 @@ export default function Sidebar() {
                 <li>
                   <Link
                     to="/feeds"
-                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-app-text-muted hover:bg-app-hover/60 hover:text-app-text"
+                    className={clsx(
+                      "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                      !feed && !category
+                        ? "border-l-2 border-accent bg-accent-soft text-accent-soft-foreground"
+                        : "text-app-text-muted hover:bg-app-hover/60 hover:text-app-text",
+                    )}
                   >
                     <span>All</span>
                   </Link>
