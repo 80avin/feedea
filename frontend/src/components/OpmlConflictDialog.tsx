@@ -80,7 +80,9 @@ export default function OpmlConflictDialog({
                           <p className="truncate text-xs text-app-text-faint">{conflict.opml.category || "Uncategorized"}</p>
                         </div>
                         <div className="flex shrink-0 flex-col gap-1">
-                          {conflict.matches.filter((m) => !m.id.startsWith("__file__:")).map((match) => (
+                          {conflict.matches
+                            .filter((m) => !m.id.startsWith("__file__:") || conflict.matches.every((x) => x.id.startsWith("__file__:")))
+                            .map((match) => (
                             <label key={match.id} className="flex items-center gap-2 text-sm text-app-text-2">
                               <input
                                 type="radio"
