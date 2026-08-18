@@ -546,20 +546,21 @@ fn keep_new_keys(resolutions: &[Resolution]) -> HashSet<usize> {
 }
 
 fn filter_outlines(outlines: &mut Vec<Outline>, index: &mut usize, keep: &HashSet<usize>) {
-    outlines.retain(|outline| {
+    // keep index assignment in the same depth-first order as parse_entries/collect
+    let mut result = Vec::with_capacity(outlines.len());
+    for outline in outlines.iter_mut() {
         if outline.xml_url.is_some() {
             let idx = *index;
             *index += 1;
-            keep.contains(&idx)
+            if keep.contains(&idx) {
+                result.push(outline.clone());
+            }
         } else {
-            true
-        }
-    });
-    for outline in outlines.iter_mut() {
-        if outline.xml_url.is_none() {
             filter_outlines(&mut outline.outlines, index, keep);
+            result.push(outline.clone());
         }
     }
+    *outlines = result;
 }
 
 pub fn build_cleaned_opml(
@@ -570,14 +571,20 @@ pub fn build_cleaned_opml(
 ) -> anyhow::Result<(String, usize)> {
     let mut doc = OPML::from_str(opml_str).map_err(|e| anyhow::anyhow!("invalid opml: {e}"))?;
     let keep_new = keep_new_keys(resolutions);
-    let conflict_by_key: HashMap<usize, &Conflict> =
-        classification.conflicts.iter().map(|c| (c.key, c)).collect();
+    let conflict_by_key: HashMap<usize, &Conflict> = classification
+        .conflicts
+        .iter()
+        .map(|c| (c.key, c))
+        .collect();
 
     // For intra-file conflicts resolved to keep-new, the later occurrence wins that url.
+    // Key by the normalized url so every variant of that url resolves to the winner.
     let mut intra_winner: HashMap<String, usize> = HashMap::new();
     for (key, conflict) in &conflict_by_key {
         if conflict.kind == ConflictKind::IntraFile && keep_new.contains(key) {
-            intra_winner.insert(conflict.opml.url.clone(), conflict.opml.index);
+            if let Some(n) = normalize_url(&conflict.opml.url) {
+                intra_winner.insert(n, conflict.opml.index);
+            }
         }
     }
 
@@ -586,6 +593,10 @@ pub fn build_cleaned_opml(
         if classification.skipped.contains(&entry.index) {
             continue;
         }
+        let winner = normalize_url(&entry.url)
+            .as_ref()
+            .and_then(|n| intra_winner.get(n))
+            .copied();
         if let Some(conflict) = conflict_by_key.get(&entry.index) {
             match conflict.kind {
                 ConflictKind::UrlVariant => {
@@ -597,27 +608,27 @@ pub fn build_cleaned_opml(
                     // handled by rename/move in the handler; never imported via opml
                 }
                 ConflictKind::IntraFile => {
-                    let winner = intra_winner.get(&entry.url).copied();
                     if winner == Some(entry.index) {
                         keep.insert(entry.index);
                     }
                 }
             }
-        } else {
+        } else if winner.map_or(true, |w| w == entry.index) {
             // brand-new feed
-            let winner = intra_winner.get(&entry.url).copied();
-            if winner.map_or(true, |w| w == entry.index) {
-                keep.insert(entry.index);
-            }
+            keep.insert(entry.index);
         }
     }
 
     let mut index = 0usize;
     filter_outlines(&mut doc.body.outlines, &mut index, &keep);
-    let cleaned = doc.to_string().map_err(|e| anyhow::anyhow!("serialize opml: {e}"))?;
+    let cleaned = doc
+        .to_string()
+        .map_err(|e| anyhow::anyhow!("serialize opml: {e}"))?;
     Ok((cleaned, keep.len()))
 }
 ```
+
+Note: `filter_outlines` numbers outlines in the same depth-first order as `parse_entries`/`collect`, so `index` matches `OpmlEntry.index`. If instead it numbered top-level siblings before recursing (as an earlier draft did), category-nested feeds would get the wrong indices and the wrong outline would be kept. `intra_winner` is keyed by the *normalized* url so a trailing-slash variant of the earlier occurrence still resolves to the winner.
 
 Note: `url` and `Outline` imports at the top of the file must include `std::collections::{HashMap, HashSet}` (already added in Task 1) and `opml::Outline`.
 
@@ -716,6 +727,15 @@ async fn opml_url_variant_conflict_keeps_new_and_migrates_articles() {
     assert_eq!(conflict["kind"], "url-variant");
     let key = conflict["key"].as_u64().unwrap() as usize;
 
+    // phase 1 must not write anything: still exactly one feed, still the old title
+    let groups_p1 = get_groups(&app, &cookie).await;
+    let feeds_p1: Vec<&serde_json::Value> = groups_p1
+        .iter()
+        .flat_map(|g| g["feeds"].as_array().unwrap())
+        .collect();
+    assert_eq!(feeds_p1.len(), 1, "conflicts phase must not write any feeds");
+    assert_eq!(feeds_p1[0]["title"], "Old Title");
+
     // phase 2 -> keep new
     let resolutions = serde_json::json!([{ "key": key, "action": "keep-new" }]);
     let body2 = serde_json::json!({ "opml": opml, "resolutions": resolutions }).to_string();
@@ -805,15 +825,22 @@ pub async fn import_opml(
         })
         .collect();
 
-    let entries = opml_import::parse_entries(&req.opml)?;
+    let entries = opml_import::parse_entries(&req.opml).map_err(ApiError::bad_request)?;
     let classification = opml_import::classify(&entries, &existing);
     let resolutions = req.resolutions.unwrap_or_default();
 
     if resolutions.is_empty() {
         if classification.conflicts.is_empty() {
-            let (cleaned, added) =
-                opml_import::build_cleaned_opml(&req.opml, &entries, &classification, &resolutions)?;
-            state.engine.import_opml(&cleaned).await?;
+            let (cleaned, added) = opml_import::build_cleaned_opml(
+                &req.opml,
+                &entries,
+                &classification,
+                &resolutions,
+            )
+            .map_err(ApiError::bad_request)?;
+            if added > 0 {
+                state.engine.import_opml(&cleaned).await?;
+            }
             return Ok(Json(json!({
                 "status": "imported",
                 "added": added,
@@ -855,8 +882,11 @@ pub async fn import_opml(
     }
 
     let (cleaned, added) =
-        opml_import::build_cleaned_opml(&req.opml, &entries, &classification, &resolutions)?;
-    state.engine.import_opml(&cleaned).await?;
+        opml_import::build_cleaned_opml(&req.opml, &entries, &classification, &resolutions)
+            .map_err(ApiError::bad_request)?;
+    if added > 0 {
+        state.engine.import_opml(&cleaned).await?;
+    }
 
     let db_path = state.engine.data_dir().join("engine/data/database.sqlite");
     let mut migrated: u64 = 0;
