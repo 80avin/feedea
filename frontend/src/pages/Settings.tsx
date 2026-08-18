@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { Button, Radio, RadioGroup } from "@heroui/react";
-import { ArrowRightStartOnRectangleIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
+import { ArrowRightStartOnRectangleIcon, CheckIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { useSession } from "../auth/useSession";
 import { useChangePassword, useSettings, useUpdateSettings } from "../state/hooks";
 import { ErrorState, LoadingState, formatError } from "../components/Feedback";
 import { ACCENTS } from "../theme/useTheme";
 import { ArrowLeftEndOnRectangleIcon, ComputerDesktopIcon, MoonIcon, SunIcon } from "@heroicons/react/24/solid";
-
-type InstallEvent = Event & { prompt: (() => Promise<void>) };
+import { installApp, usePwa } from "../pwa/usePwa";
 
 const REPO_URL = "https://github.com/80avin/feedea";
 const ISSUES_URL = "https://github.com/80avin/feedea/issues";
@@ -30,6 +29,7 @@ export default function Settings() {
   const { data, isLoading, isError, error, refetch } = useSettings();
   const updateSettings = useUpdateSettings();
   const changePassword = useChangePassword();
+  const { installPrompt, isInstalled } = usePwa();
 
   const [theme, setTheme] = useState("system");
   const [accent, setAccent] = useState("blue");
@@ -53,16 +53,6 @@ export default function Settings() {
       setKeepDays(data.keep_articles_days === null ? "" : String(data.keep_articles_days));
     }
   }, [data, dirty]);
-
-  const [ installPrompt, setInstallPrompt ] = useState<null | InstallEvent>(null)
-  useEffect(() => {
-    const cb = (e: Event)  => {
-      e.preventDefault();
-      setInstallPrompt(e as InstallEvent)
-    };
-    window.addEventListener('beforeinstallprompt', cb);
-    return () => window.removeEventListener('beforeinstallprompt', cb);
-  }, []);
 
   const savePreferences = async () => {
     const patch: { theme?: string; accent?: string; sync_interval_minutes?: number; keep_articles_days?: number | null } = {};
@@ -270,24 +260,27 @@ export default function Settings() {
 
           <section className="flex flex-col gap-3 rounded-lg border border-app-border p-4">
             <p>Install to homescreen</p>
-            <Button isDisabled={!installPrompt} onClick={async () => {
-              const result = await installPrompt!.prompt()
-              console.log(result)
-            }}><ArrowLeftEndOnRectangleIcon /> Install</Button>
-            {/* TODO: check if http url, and warn */}
-            {!installPrompt && (
+            {isInstalled ? (
+              <p className="flex items-center gap-2 text-sm text-app-text-muted">
+                <CheckIcon className="h-4 w-4 shrink-0 text-emerald-500" />
+                App is installed.
+              </p>
+            ) : installPrompt ? (
+              <Button onPress={installApp}>
+                <ArrowLeftEndOnRectangleIcon className="h-4 w-4" />
+                Install
+              </Button>
+            ) : (
               <>
-                <p>App not installable as PWA.</p>
-                <p>Possible reasons</p>
-                <ul>
+                <p className="text-sm text-app-text-muted">App not installable as PWA.</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-app-text-faint">Possible reasons</p>
+                <ul className="list-disc space-y-1.5 pl-5 text-sm text-app-text-muted">
                   <li>App already installed</li>
                   {window.location.protocol === "http:" && (
                     <li>
                       http: websites are not installable. If the host is private
                       and known to be secure, configure{" "}
-                      <code>
-                        chrome://flags/#unsafely-treat-insecure-origin-as-secure
-                      </code>
+                      <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>
                     </li>
                   )}
                   <li>On mobile, check if the launcher supports PWA installation.</li>

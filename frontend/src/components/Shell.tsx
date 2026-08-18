@@ -2,6 +2,7 @@ import { useSession } from "../auth/useSession";
 import DesktopLayout from "../layout/DesktopLayout";
 import MobileLayout from "../layout/MobileLayout";
 import { ErrorState } from "./Feedback";
+import UpdateBanner from "./UpdateBanner";
 
 export default function Shell() {
   const { session, loading, isError, error, retry } = useSession();
@@ -20,6 +21,7 @@ export default function Shell() {
 
   return (
     <div className="bg-app-bg text-app-text">
+      <UpdateBanner />
       <DesktopLayout />
       <MobileLayout />
     </div>
