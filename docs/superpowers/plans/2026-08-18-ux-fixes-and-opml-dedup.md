@@ -1325,12 +1325,16 @@ export default function FeedNameLink({
       to={`/feeds?feed=${encodeId(feedId)}`}
       className={className}
       onClick={(e) => e.stopPropagation()}
+      onAuxClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
     >
       {title}
     </Link>
   );
 }
 ```
+
+Stop propagation on `click`, `auxclick`, and `keydown` so the surrounding row's `onClick`/`onAuxClick`/`onKeyDown` (which open the article) never swallow this link's own activation — otherwise keyboard Enter and middle-click on the feed name would open the article instead of the feed.
 
 - [ ] **Step 2: Restructure `TimelineItem` in `TimelinePanel.tsx`**
 
