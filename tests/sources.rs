@@ -490,7 +490,7 @@ async fn import_and_export_opml() {
     assert_eq!(import_resp.status(), StatusCode::OK);
     let body = import_resp.into_body().collect().await.unwrap().to_bytes();
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(value["imported"], true);
+    assert_eq!(value["status"], "imported");
 
     let groups = get_groups(&app, &cookie).await;
     let toplevel = find_group(&groups, "NewsFlash.Toplevel")
@@ -526,4 +526,173 @@ async fn import_and_export_opml() {
         "exported opml should contain the feed url"
     );
     assert!(!xml.trim().is_empty());
+}
+
+#[tokio::test]
+async fn opml_exact_duplicate_import_is_skipped() {
+    let (feed_url, app, _server, _db) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+    let opml = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Test Feed" title="Test Feed" type="rss" xmlUrl="{feed_url}"/>
+  </body>
+</opml>"#
+    );
+    let body = serde_json::json!({ "opml": opml }).to_string();
+    let first = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources/import-opml")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(body.clone()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    let first_val: serde_json::Value =
+        serde_json::from_slice(&first.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(first_val["status"], "imported");
+    assert_eq!(first_val["added"], 1);
+
+    let second = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources/import-opml")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let second_val: serde_json::Value =
+        serde_json::from_slice(&second.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(second_val["status"], "imported");
+    assert_eq!(second_val["added"], 0);
+    assert_eq!(second_val["skipped"], 1);
+
+    let groups = get_groups(&app, &cookie).await;
+    let count: usize = groups
+        .iter()
+        .flat_map(|g| g["feeds"].as_array().unwrap())
+        .count();
+    assert_eq!(
+        count, 1,
+        "importing same opml twice must not duplicate the feed"
+    );
+}
+
+#[tokio::test]
+async fn opml_url_variant_conflict_keeps_new_and_migrates_articles() {
+    let (feed_url, app, _server, _db) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+
+    let add = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(
+                    serde_json::json!({ "url": feed_url, "title": "Old Title" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(add.status(), StatusCode::OK);
+
+    let variant_url = format!("{feed_url}/");
+    let opml = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="New Title" title="New Title" type="rss" xmlUrl="{variant_url}"/>
+  </body>
+</opml>"#
+    );
+
+    // phase 1 -> conflicts
+    let body = serde_json::json!({ "opml": opml }).to_string();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources/import-opml")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(body.clone()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let val: serde_json::Value =
+        serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(val["status"], "conflicts");
+    let conflict = &val["conflicts"][0];
+    assert_eq!(conflict["kind"], "url-variant");
+    let key = conflict["key"].as_u64().unwrap() as usize;
+
+    // phase 2 -> keep new
+    let resolutions = serde_json::json!([{ "key": key, "action": "keep-new" }]);
+    let body2 = serde_json::json!({ "opml": opml, "resolutions": resolutions }).to_string();
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources/import-opml")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(body2))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let val2: serde_json::Value =
+        serde_json::from_slice(&resp2.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(val2["status"], "imported");
+
+    // exactly one feed remains, with the new title, and articles survived the migration
+    let groups = get_groups(&app, &cookie).await;
+    let feeds: Vec<&serde_json::Value> = groups
+        .iter()
+        .flat_map(|g| g["feeds"].as_array().unwrap())
+        .collect();
+    assert_eq!(feeds.len(), 1);
+    assert_eq!(feeds[0]["title"], "New Title");
+    assert_eq!(feeds[0]["feed_url"], variant_url);
+
+    let articles = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/articles")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body_articles = articles.into_body().collect().await.unwrap().to_bytes();
+    let val_articles: serde_json::Value = serde_json::from_slice(&body_articles).unwrap();
+    let items = val_articles.as_array().unwrap();
+    assert_eq!(
+        items.len(),
+        2,
+        "articles from the old feed must be migrated to the new feed"
+    );
 }

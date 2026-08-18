@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use opml::{OPML, Outline};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OpmlEntry {
@@ -189,6 +189,128 @@ pub fn classify(entries: &[OpmlEntry], existing: &[ExistingFeed]) -> Classificat
     }
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ResolutionAction {
+    KeepNew,
+    KeepExisting,
+    Skip,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Resolution {
+    pub key: usize,
+    pub action: ResolutionAction,
+    pub keep_existing_feed_id: Option<String>,
+}
+
+pub fn migrate_feed_articles(
+    db_path: &std::path::Path,
+    from_feed_id: &str,
+    to_feed_id: &str,
+) -> anyhow::Result<u64> {
+    if from_feed_id == to_feed_id {
+        return Ok(0);
+    }
+    let conn = rusqlite::Connection::open(db_path)?;
+    conn.busy_timeout(std::time::Duration::from_secs(10))?;
+    let n = conn.execute(
+        "UPDATE articles SET feed_id = ?1 WHERE feed_id = ?2",
+        rusqlite::params![to_feed_id, from_feed_id],
+    )?;
+    Ok(n as u64)
+}
+
+fn keep_new_keys(resolutions: &[Resolution]) -> HashSet<usize> {
+    resolutions
+        .iter()
+        .filter(|r| r.action == ResolutionAction::KeepNew)
+        .map(|r| r.key)
+        .collect()
+}
+
+fn filter_outlines(outlines: &mut Vec<Outline>, index: &mut usize, keep: &HashSet<usize>) {
+    // keep index assignment in the same depth-first order as parse_entries/collect
+    let mut result = Vec::with_capacity(outlines.len());
+    for outline in outlines.iter_mut() {
+        if outline.xml_url.is_some() {
+            let idx = *index;
+            *index += 1;
+            if keep.contains(&idx) {
+                result.push(outline.clone());
+            }
+        } else {
+            filter_outlines(&mut outline.outlines, index, keep);
+            result.push(outline.clone());
+        }
+    }
+    *outlines = result;
+}
+
+pub fn build_cleaned_opml(
+    opml_str: &str,
+    entries: &[OpmlEntry],
+    classification: &Classification,
+    resolutions: &[Resolution],
+) -> anyhow::Result<(String, usize)> {
+    let mut doc = OPML::from_str(opml_str).map_err(|e| anyhow::anyhow!("invalid opml: {e}"))?;
+    let keep_new = keep_new_keys(resolutions);
+    let conflict_by_key: HashMap<usize, &Conflict> = classification
+        .conflicts
+        .iter()
+        .map(|c| (c.key, c))
+        .collect();
+
+    // For intra-file conflicts resolved to keep-new, the later occurrence wins that url.
+    // Key by the normalized url so every variant of that url resolves to the winner.
+    let mut intra_winner: HashMap<String, usize> = HashMap::new();
+    for (key, conflict) in &conflict_by_key {
+        if conflict.kind == ConflictKind::IntraFile && keep_new.contains(key) {
+            if let Some(n) = normalize_url(&conflict.opml.url) {
+                intra_winner.insert(n, conflict.opml.index);
+            }
+        }
+    }
+
+    let mut keep = HashSet::new();
+    for entry in entries {
+        if classification.skipped.contains(&entry.index) {
+            continue;
+        }
+        let winner = normalize_url(&entry.url)
+            .as_ref()
+            .and_then(|n| intra_winner.get(n))
+            .copied();
+        if let Some(conflict) = conflict_by_key.get(&entry.index) {
+            match conflict.kind {
+                ConflictKind::UrlVariant => {
+                    if keep_new.contains(&entry.index) {
+                        keep.insert(entry.index);
+                    }
+                }
+                ConflictKind::UrlIdentical => {
+                    // handled by rename/move in the handler; never imported via opml
+                }
+                ConflictKind::IntraFile => {
+                    if winner == Some(entry.index) {
+                        keep.insert(entry.index);
+                    }
+                }
+            }
+        } else if winner.map_or(true, |w| w == entry.index) {
+            // brand-new feed
+            keep.insert(entry.index);
+        }
+    }
+
+    let mut index = 0usize;
+    filter_outlines(&mut doc.body.outlines, &mut index, &keep);
+    let cleaned = doc
+        .to_string()
+        .map_err(|e| anyhow::anyhow!("serialize opml: {e}"))?;
+    Ok((cleaned, keep.len()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,5 +457,67 @@ mod tests {
         assert_eq!(c.new_count, 1);
         assert_eq!(c.conflicts.len(), 0);
         assert_eq!(c.exact_duplicates, 0);
+    }
+
+    #[test]
+    fn build_cleaned_opml_drops_exact_dups_keeps_resolved() {
+        use crate::engine::opml_import::*;
+        let opml = OPML.to_string();
+        let entries = parse_entries(&opml).unwrap();
+        let classification = classify(&entries, &existing());
+        // entry 0 is an exact duplicate (skipped). Entries 1 and 2 are url-variant conflicts.
+        let resolutions = vec![
+            Resolution {
+                key: 1,
+                action: ResolutionAction::KeepExisting,
+                keep_existing_feed_id: None,
+            },
+            Resolution {
+                key: 2,
+                action: ResolutionAction::KeepNew,
+                keep_existing_feed_id: None,
+            },
+        ];
+        let (cleaned, added) =
+            build_cleaned_opml(&opml, &entries, &classification, &resolutions).unwrap();
+        assert_eq!(added, 1); // entry 1 dropped (keep-existing), entry 2 kept (keep-new), entry 0 skipped
+        let cleaned_entries = parse_entries(&cleaned).unwrap();
+        assert_eq!(cleaned_entries.len(), 1);
+        assert!(
+            cleaned_entries
+                .iter()
+                .all(|e| e.url != "https://example.com/feed.xml")
+        );
+        assert!(
+            cleaned_entries
+                .iter()
+                .any(|e| e.url == "http://example.org/b/")
+        );
+    }
+
+    #[test]
+    fn build_cleaned_opml_intra_file_keep_new_prefers_later_occurrence() {
+        use crate::engine::opml_import::*;
+        let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="First" title="First" type="rss" xmlUrl="https://example.com/dup"/>
+    <outline text="Second" title="Second" type="rss" xmlUrl="https://example.com/dup/"/>
+  </body>
+</opml>"#;
+        let entries = parse_entries(opml).unwrap();
+        let classification = classify(&entries, &[]);
+        // intra-file conflict at key 1; keep-new -> the later occurrence wins that url
+        let resolutions = vec![Resolution {
+            key: 1,
+            action: ResolutionAction::KeepNew,
+            keep_existing_feed_id: None,
+        }];
+        let (cleaned, added) =
+            build_cleaned_opml(opml, &entries, &classification, &resolutions).unwrap();
+        assert_eq!(added, 1);
+        let cleaned_entries = parse_entries(&cleaned).unwrap();
+        assert_eq!(cleaned_entries.len(), 1);
+        assert_eq!(cleaned_entries[0].title, "Second");
     }
 }
