@@ -179,18 +179,16 @@ pub async fn import_opml(
         })
         .collect();
 
-    let entries = opml_import::parse_entries(&req.opml)?;
+    let entries =
+        opml_import::parse_entries(&req.opml).map_err(|e| ApiError::bad_request(e.to_string()))?;
     let classification = opml_import::classify(&entries, &existing);
     let resolutions = req.resolutions.unwrap_or_default();
 
     if resolutions.is_empty() {
         if classification.conflicts.is_empty() {
-            let (cleaned, added) = opml_import::build_cleaned_opml(
-                &req.opml,
-                &entries,
-                &classification,
-                &resolutions,
-            )?;
+            let (cleaned, added) =
+                opml_import::build_cleaned_opml(&req.opml, &entries, &classification, &resolutions)
+                    .map_err(|e| ApiError::bad_request(e.to_string()))?;
             if added > 0 {
                 state.engine.import_opml(&cleaned).await?;
             }
@@ -235,7 +233,8 @@ pub async fn import_opml(
     }
 
     let (cleaned, added) =
-        opml_import::build_cleaned_opml(&req.opml, &entries, &classification, &resolutions)?;
+        opml_import::build_cleaned_opml(&req.opml, &entries, &classification, &resolutions)
+            .map_err(|e| ApiError::bad_request(e.to_string()))?;
     if added > 0 {
         state.engine.import_opml(&cleaned).await?;
     }

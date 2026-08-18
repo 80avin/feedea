@@ -645,6 +645,22 @@ async fn opml_url_variant_conflict_keeps_new_and_migrates_articles() {
     assert_eq!(conflict["kind"], "url-variant");
     let key = conflict["key"].as_u64().unwrap() as usize;
 
+    // phase 1 must not write anything: still exactly one feed, unchanged title
+    let groups_p1 = get_groups(&app, &cookie).await;
+    let feeds_p1: Vec<&serde_json::Value> = groups_p1
+        .iter()
+        .flat_map(|g| g["feeds"].as_array().unwrap())
+        .collect();
+    assert_eq!(
+        feeds_p1.len(),
+        1,
+        "conflicts phase must not write any feeds"
+    );
+    assert_eq!(
+        feeds_p1[0]["title"], "Test Feed",
+        "conflicts phase must not change the existing feed's title"
+    );
+
     // phase 2 -> keep new
     let resolutions = serde_json::json!([{ "key": key, "action": "keep-new" }]);
     let body2 = serde_json::json!({ "opml": opml, "resolutions": resolutions }).to_string();
