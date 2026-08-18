@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { encodeId } from "../api/client";
 import type { Headline } from "../api/types";
-import FeedContextMenu, { useFeedSummary } from "./FeedContextMenu";
-import { DeleteDialog, RenameDialog } from "./SourceMenu";
+import ArticleContextMenu from "./ArticleContextMenu";
 import { useContextMenu } from "../hooks/useContextMenu";
 import { useArticlePath } from "../hooks/useArticlePath";
 import FeedNameLink from "./FeedNameLink";
@@ -15,9 +14,7 @@ function formatDate(iso: string): string {
 
 export default function ArticleListItem({ item, hideFeed }: { item: Headline; hideFeed?: boolean }) {
   const [thumbFailed, setThumbFailed] = useState(false);
-  const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
   const { position, close, menuRef, triggerProps } = useContextMenu();
-  const feed = useFeedSummary(item.feed_id, item.feed_title ?? "");
   const articlePathFn = useArticlePath();
   const navigate = useNavigate();
 
@@ -76,17 +73,8 @@ export default function ArticleListItem({ item, hideFeed }: { item: Headline; hi
         </div>
       </div>
       {position && (
-        <FeedContextMenu
-          feed={feed}
-          position={position}
-          menuRef={menuRef}
-          onClose={close}
-          onEdit={() => setDialog("rename")}
-          onDelete={() => setDialog("delete")}
-        />
+        <ArticleContextMenu article={item} position={position} menuRef={menuRef} onClose={close} />
       )}
-      <RenameDialog feed={feed} open={dialog === "rename"} onClose={() => setDialog(null)} />
-      <DeleteDialog feed={feed} open={dialog === "delete"} onClose={() => setDialog(null)} />
     </>
   );
 }

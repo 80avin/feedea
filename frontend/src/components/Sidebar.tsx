@@ -15,7 +15,10 @@ import {
 import clsx from "clsx";
 import { useSession } from "../auth/useSession";
 import { useCategories, useSources } from "../state/hooks";
-import type { CategoryNode } from "../api/types";
+import type { CategoryNode, FeedSummary } from "../api/types";
+import { useContextMenu } from "../hooks/useContextMenu";
+import FeedContextMenu from "./FeedContextMenu";
+import { DeleteDialog, RenameDialog } from "./SourceMenu";
 import AddCategoryDialog from "./AddCategoryDialog";
 import AddSourceDialog from "./AddSourceDialog";
 import OpmlImportButton from "./OpmlImportButton";
@@ -122,24 +125,41 @@ function TreeLink({ node, depth }: { node: CategoryNode; depth: number }) {
   );
 }
 
-function FeedLink({ id, title, unreadCount }: { id: string; title: string; unreadCount: number }) {
+function FeedLink({ feed }: { feed: FeedSummary }) {
+  const { position, close, menuRef, triggerProps } = useContextMenu();
+  const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
   return (
-    <NavLink
-      to={`/feeds?feed=${encodeURIComponent(id)}`}
-      className={({ isActive }) =>
-        clsx(
-          "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-          isActive ? "bg-accent-soft text-accent-soft-foreground" : "text-app-text-muted hover:bg-app-hover/60 hover:text-app-text",
-        )
-      }
-    >
-      <span className="truncate">{title}</span>
-      {unreadCount > 0 && (
-        <span className="rounded bg-app-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-app-text-2">
-          {unreadCount}
-        </span>
+    <>
+      <NavLink
+        to={`/feeds?feed=${encodeURIComponent(feed.id)}`}
+        className={({ isActive }) =>
+          clsx(
+            "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+            isActive ? "bg-accent-soft text-accent-soft-foreground" : "text-app-text-muted hover:bg-app-hover/60 hover:text-app-text",
+          )
+        }
+        {...triggerProps}
+      >
+        <span className="truncate">{feed.title}</span>
+        {feed.unread_count > 0 && (
+          <span className="rounded bg-app-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-app-text-2">
+            {feed.unread_count}
+          </span>
+        )}
+      </NavLink>
+      {position && (
+        <FeedContextMenu
+          feed={feed}
+          position={position}
+          menuRef={menuRef}
+          onClose={close}
+          onEdit={() => setDialog("rename")}
+          onDelete={() => setDialog("delete")}
+        />
       )}
-    </NavLink>
+      <RenameDialog feed={feed} open={dialog === "rename"} onClose={() => setDialog(null)} />
+      <DeleteDialog feed={feed} open={dialog === "delete"} onClose={() => setDialog(null)} />
+    </>
   );
 }
 
@@ -208,7 +228,7 @@ export default function Sidebar() {
                   <p className="px-2 py-1 text-xs text-app-text-faint">{group.category_name}</p>
                   <ul className="flex flex-col gap-0.5">
                     {group.feeds.map((feed) => (
-                      <FeedLink key={feed.id} id={feed.id} title={feed.title} unreadCount={feed.unread_count} />
+                      <FeedLink key={feed.id} feed={feed} />
                     ))}
                   </ul>
                 </div>
