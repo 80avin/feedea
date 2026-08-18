@@ -495,6 +495,32 @@ fn build_cleaned_opml_intra_file_keep_new_prefers_later_occurrence() {
     assert_eq!(cleaned_entries.len(), 1);
     assert_eq!(cleaned_entries[0].title, "Second");
 }
+
+#[test]
+fn build_cleaned_opml_multiple_intra_file_keep_news_keep_the_last() {
+    use crate::engine::opml_import::*;
+    let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="One" title="One" type="rss" xmlUrl="https://example.com/dup"/>
+    <outline text="Two" title="Two" type="rss" xmlUrl="https://example.com/dup/"/>
+    <outline text="Three" title="Three" type="rss" xmlUrl="https://example.com/dup"/>
+  </body>
+</opml>"#;
+    let entries = parse_entries(opml).unwrap();
+    let classification = classify(&entries, &[]);
+    // both later occurrences resolved keep-new; the latest (index 2) must win,
+    // deterministically regardless of HashMap iteration order
+    let resolutions = vec![
+        Resolution { key: 1, action: ResolutionAction::KeepNew, keep_existing_feed_id: None },
+        Resolution { key: 2, action: ResolutionAction::KeepNew, keep_existing_feed_id: None },
+    ];
+    let (cleaned, added) = build_cleaned_opml(opml, &entries, &classification, &resolutions).unwrap();
+    assert_eq!(added, 1);
+    let cleaned_entries = parse_entries(&cleaned).unwrap();
+    assert_eq!(cleaned_entries.len(), 1);
+    assert_eq!(cleaned_entries[0].title, "Three");
+}
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -579,8 +605,13 @@ pub fn build_cleaned_opml(
 
     // For intra-file conflicts resolved to keep-new, the later occurrence wins that url.
     // Key by the normalized url so every variant of that url resolves to the winner.
+    // Iterate keys ascending so when several occurrences on one url are all keep-new,
+    // the LAST (later, higher-index) occurrence wins deterministically.
     let mut intra_winner: HashMap<String, usize> = HashMap::new();
-    for (key, conflict) in &conflict_by_key {
+    let mut keys: Vec<&usize> = conflict_by_key.keys().collect();
+    keys.sort();
+    for key in keys {
+        let conflict = conflict_by_key[key];
         if conflict.kind == ConflictKind::IntraFile && keep_new.contains(key) {
             if let Some(n) = normalize_url(&conflict.opml.url) {
                 intra_winner.insert(n, conflict.opml.index);
@@ -917,12 +948,18 @@ pub async fn import_opml(
                     }
                 }
                 ConflictKind::UrlIdentical => {
-                    let existing_id = &conflict.matches[0].id;
-                    if conflict.opml.title != conflict.matches[0].title {
-                        state.engine.rename_feed(existing_id, &conflict.opml.title).await?;
+                    // matches[0] may be a url-variant duplicate of the id-match feed;
+                    // always act on the feed whose id equals the opml url (classify
+                    // guarantees it is in matches, since this branch requires an id match)
+                    let existing_id = conflict
+                        .matches
+                        .iter()
+                        .find(|m| m.id == conflict.opml.url)
+                        .expect("url-identical conflict always contains the id-match feed");
+                    if conflict.opml.title != existing_id.title {
+                        state.engine.rename_feed(&existing_id.id, &conflict.opml.title).await?;
                     }
-                    if !conflict.opml.category.is_empty()
-                        && conflict.opml.category != conflict.matches[0].category
+                    if !conflict.opml.category.is_empty() && conflict.opml.category != existing_id.category
                     {
                         let (categories, _) = state.engine.get_categories().await?;
                         let category_id = categories
@@ -930,11 +967,12 @@ pub async fn import_opml(
                             .find(|c| c.label == conflict.opml.category)
                             .map(|c| c.category_id.as_str().to_string())
                             .unwrap_or_else(|| {
-                                // unreachable: cleaned opml keeps the category outline, so it exists
+                                // when added == 0 the cleaned opml is never imported, so a
+                                // brand-new category was never created and the move no-ops
                                 String::new()
                             });
                         if !category_id.is_empty() {
-                            state.engine.move_feed(existing_id, &category_id).await?;
+                            state.engine.move_feed(&existing_id.id, &category_id).await?;
                         }
                     }
                 }
