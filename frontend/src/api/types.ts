@@ -147,3 +147,41 @@ export interface ArticleQueryParams {
   tag?: string;
   search?: string;
 }
+
+export interface OpmlEntry {
+  index: number;
+  title: string;
+  url: string;
+  category: string;
+}
+
+export interface OpmlExistingFeed {
+  id: string;
+  title: string;
+  url: string | null;
+  website: string | null;
+  category: string;
+}
+
+export interface OpmlConflict {
+  key: number;
+  kind: "url-identical" | "url-variant" | "intra-file";
+  opml: OpmlEntry;
+  matches: OpmlExistingFeed[];
+}
+
+export interface OpmlResolution {
+  key: number;
+  action: "keep-new" | "keep-existing" | "skip";
+  keep_existing_feed_id?: string;
+}
+
+export interface ImportOpmlResponse {
+  status: "imported" | "conflicts";
+  added?: number;
+  skipped?: number;
+  migrated?: number;
+  conflicts_resolved?: number;
+  conflicts?: OpmlConflict[];
+  stats?: { new: number; exact_duplicates: number };
+}

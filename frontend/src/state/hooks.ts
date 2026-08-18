@@ -7,6 +7,8 @@ import type {
   DiscoverResponse,
   FeedSummary,
   Headline,
+  ImportOpmlResponse,
+  OpmlResolution,
   OverviewResponse,
   SavedResponse,
   Settings,
@@ -333,7 +335,8 @@ export function useUpdateSettings() {
 export function useImportOpml() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ opml }: { opml: string }) => api.post("/api/sources/import-opml", { opml }),
+    mutationFn: ({ opml, resolutions }: { opml: string; resolutions?: OpmlResolution[] }) =>
+      api.post<ImportOpmlResponse>("/api/sources/import-opml", { opml, resolutions }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["feeds"] });
       queryClient.invalidateQueries({ queryKey: ["sources"] });

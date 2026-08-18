@@ -3,20 +3,32 @@ import { Button } from "@heroui/react";
 import { ArrowDownTrayIcon, ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 import { useExportOpml, useImportOpml } from "../state/hooks";
 import { formatError } from "./Feedback";
+import type { ImportOpmlResponse, OpmlConflict } from "../api/types";
+import OpmlConflictDialog from "./OpmlConflictDialog";
+
+function summaryText(result: ImportOpmlResponse): string {
+  const migrated = (result.migrated ?? 0) > 0 ? `, migrated ${result.migrated}` : "";
+  return `Imported ${result.added} feed(s), skipped ${result.skipped} duplicate(s)${migrated}`;
+}
 
 export default function OpmlButtons() {
   const importOpml = useImportOpml();
   const exportOpml = useExportOpml();
   const fileRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState("");
+  const [conflictState, setConflictState] = useState<{ opml: string; conflicts: OpmlConflict[] } | null>(null);
 
   const onFile = async (file: File | null) => {
     if (!file) return;
     setStatus("");
     try {
       const text = await file.text();
-      await importOpml.mutateAsync({ opml: text });
-      setStatus(`Imported ${file.name}`);
+      const result = await importOpml.mutateAsync({ opml: text });
+      if (result.status === "conflicts") {
+        setConflictState({ opml: text, conflicts: result.conflicts ?? [] });
+      } else {
+        setStatus(summaryText(result));
+      }
     } catch (e) {
       setStatus(formatError(e));
     }
@@ -65,6 +77,15 @@ export default function OpmlButtons() {
         <span className="absolute right-0 top-full z-10 mt-1 max-w-48 truncate rounded-md border border-app-border bg-app-bg px-2 py-1 text-xs text-app-text-faint shadow-lg">
           {status}
         </span>
+      )}
+      {conflictState && (
+        <OpmlConflictDialog
+          open
+          opml={conflictState.opml}
+          conflicts={conflictState.conflicts}
+          onClose={() => setConflictState(null)}
+          onImported={(result) => setStatus(summaryText(result))}
+        />
       )}
     </div>
   );
