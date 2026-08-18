@@ -199,6 +199,23 @@ mod tests {
         assert!(c.skipped.contains(&1));
         assert_eq!(c.new_count, 1);
     }
+
+    #[test]
+    fn unparseable_entry_url_is_new_not_a_conflict() {
+        // Feed B in existing() has website: None. A malformed/scheme-less entry url
+        // normalizes to None and must NOT match it via the None == None path.
+        let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Bogus" title="Bogus" type="rss" xmlUrl="www.example.com/feed.xml"/>
+  </body>
+</opml>"#;
+        let entries = parse_entries(opml).unwrap();
+        let c = classify(&entries, &existing());
+        assert_eq!(c.new_count, 1);
+        assert_eq!(c.conflicts.len(), 0);
+        assert_eq!(c.exact_duplicates, 0);
+    }
 }
 ```
 
@@ -327,9 +344,13 @@ pub fn classify(entries: &[OpmlEntry], existing: &[ExistingFeed]) -> Classificat
         let matches: Vec<ExistingFeed> = existing
             .iter()
             .filter(|f| {
+                // never let normalize_url == None on the left match a None url/website:
+                // an unparseable entry url must not match website-less existing feeds
                 f.id == entry.url
-                    || f.url.as_deref().and_then(normalize_url) == norm
-                    || f.website.as_deref().and_then(normalize_url) == norm
+                    || norm.as_ref().is_some_and(|n| {
+                        f.url.as_deref().and_then(normalize_url).as_ref() == Some(n)
+                            || f.website.as_deref().and_then(normalize_url).as_ref() == Some(n)
+                    })
             })
             .cloned()
             .collect();
