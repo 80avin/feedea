@@ -16,6 +16,8 @@ export default function FeedNameLink({
       to={`/feeds?feed=${encodeId(feedId)}`}
       className={className}
       onClick={(e) => e.stopPropagation()}
+      onAuxClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
     >
       {title}
     </Link>
