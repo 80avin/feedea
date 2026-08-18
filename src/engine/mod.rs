@@ -18,6 +18,7 @@ use crate::config::Config;
 use crate::dto::{ArticleDetail, FeedSummary, Headline};
 
 pub mod content;
+pub mod opml_import;
 pub mod queries;
 pub mod sync;
 
