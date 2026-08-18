@@ -734,7 +734,7 @@ async fn opml_url_variant_conflict_keeps_new_and_migrates_articles() {
         .flat_map(|g| g["feeds"].as_array().unwrap())
         .collect();
     assert_eq!(feeds_p1.len(), 1, "conflicts phase must not write any feeds");
-    assert_eq!(feeds_p1[0]["title"], "Old Title");
+    assert_eq!(feeds_p1[0]["title"], "Test Feed");
 
     // phase 2 -> keep new
     let resolutions = serde_json::json!([{ "key": key, "action": "keep-new" }]);
@@ -825,7 +825,7 @@ pub async fn import_opml(
         })
         .collect();
 
-    let entries = opml_import::parse_entries(&req.opml).map_err(ApiError::bad_request)?;
+    let entries = opml_import::parse_entries(&req.opml).map_err(|e| ApiError::bad_request(e.to_string()))?;
     let classification = opml_import::classify(&entries, &existing);
     let resolutions = req.resolutions.unwrap_or_default();
 
@@ -837,7 +837,7 @@ pub async fn import_opml(
                 &classification,
                 &resolutions,
             )
-            .map_err(ApiError::bad_request)?;
+            .map_err(|e| ApiError::bad_request(e.to_string()))?;
             if added > 0 {
                 state.engine.import_opml(&cleaned).await?;
             }
@@ -883,7 +883,7 @@ pub async fn import_opml(
 
     let (cleaned, added) =
         opml_import::build_cleaned_opml(&req.opml, &entries, &classification, &resolutions)
-            .map_err(ApiError::bad_request)?;
+            .map_err(|e| ApiError::bad_request(e.to_string()))?;
     if added > 0 {
         state.engine.import_opml(&cleaned).await?;
     }
