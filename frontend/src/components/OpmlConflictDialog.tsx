@@ -58,7 +58,7 @@ export default function OpmlConflictDialog({
   return (
     <Modal state={state}>
       <Modal.Backdrop>
-        <Modal.Container>
+        <Modal.Container className="max-w-2xl">
           <Modal.Dialog>
             <Modal.Header>
               <Modal.Heading>Resolve duplicate feeds</Modal.Heading>
