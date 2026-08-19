@@ -31,8 +31,8 @@ export default function OpmlConflictDialog({
   };
 
   function fieldChanged(a: string, b: string): boolean {
-    const na = (a ?? "").trim().toLowerCase();
-    const nb = (b ?? "").trim().toLowerCase();
+    const na = a.trim().toLowerCase();
+    const nb = b.trim().toLowerCase();
     return na !== nb && na !== "" && nb !== "";
   }
 
