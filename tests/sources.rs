@@ -712,3 +712,70 @@ async fn opml_url_variant_conflict_keeps_new_and_migrates_articles() {
         "articles from the old feed must be migrated to the new feed"
     );
 }
+
+#[tokio::test]
+async fn opml_import_merges_duplicate_sibling_categories() {
+    let (_feed_url, app, _server, _db) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+
+    let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Tech" title="Tech">
+      <outline text="Feed A" title="Feed A" type="rss" xmlUrl="https://example-a.invalid/feed.xml"/>
+    </outline>
+    <outline text="Tech" title="Tech">
+      <outline text="Feed B" title="Feed B" type="rss" xmlUrl="https://example-b.invalid/feed.xml"/>
+    </outline>
+  </body>
+</opml>"#;
+    let body = serde_json::json!({ "opml": opml }).to_string();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources/import-opml")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let val: serde_json::Value =
+        serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(val["status"], "imported");
+    assert_eq!(val["added"], 2);
+
+    let tree_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/categories")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(tree_resp.status(), StatusCode::OK);
+    let tree: serde_json::Value =
+        serde_json::from_slice(&tree_resp.into_body().collect().await.unwrap().to_bytes()).unwrap();
+
+    let tech: Vec<&serde_json::Value> = tree["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|n| n["name"] == "Tech")
+        .collect();
+    assert_eq!(tech.len(), 1, "exactly one 'Tech' category must exist");
+
+    let groups = get_groups(&app, &cookie).await;
+    let feeds: Vec<&serde_json::Value> = groups
+        .iter()
+        .flat_map(|g| g["feeds"].as_array().unwrap())
+        .collect();
+    assert_eq!(feeds.len(), 2, "both feeds imported");
+}
