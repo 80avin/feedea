@@ -180,19 +180,6 @@ Back up the whole `<data_dir>` for a full snapshot.
 See [docs/selfhosting.md](docs/selfhosting.md) for the systemd unit,
 deployment notes, and troubleshooting.
 
-## CI & releases
-
-Every push and pull request runs the full test suite (fmt, clippy, cargo
-tests, frontend typecheck/lint) via GitHub Actions.
-
-Pushing a tag like `v0.1.0` builds release binaries for Linux (x64, arm64),
-Windows x64, and macOS (arm64, x64) on native runners, runs the end-to-end
-smoke test on Linux, and attaches them to a draft GitHub Release.
-
-The CI jobs install the build dependencies listed above (libxml2, OpenSSL,
-libclang) per runner; on Windows the vcpkg `libxml2` port is built with the
-`x64-windows-static-md` triplet.
-
 ## License
 
 feedea links against [news-flash](https://crates.io/crates/news-flash), which

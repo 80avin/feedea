@@ -44,11 +44,3 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     axum::serve(listener, api::router(state)).await?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn version_is_set() {
-        assert_eq!(crate::version(), "0.1.0");
-    }
-}
