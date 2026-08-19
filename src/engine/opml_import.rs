@@ -104,6 +104,49 @@ pub fn normalize_url(raw: &str) -> Option<String> {
     Some(normalized)
 }
 
+fn outline_title(o: &Outline) -> String {
+    o.title
+        .clone()
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| o.text.clone())
+}
+
+fn merge_sibling_categories(outlines: &mut Vec<Outline>) {
+    struct Holder {
+        is_category: bool,
+        title: String,
+        outline: Outline,
+    }
+    let mut groups: Vec<Holder> = Vec::with_capacity(outlines.len());
+    for mut outline in std::mem::take(outlines) {
+        let is_category = outline.xml_url.is_none();
+        let title = outline_title(&outline);
+        if is_category
+            && let Some(existing) = groups
+                .iter_mut()
+                .find(|g| g.is_category && g.title == title)
+        {
+            existing.outline.outlines.append(&mut outline.outlines);
+            continue;
+        }
+        groups.push(Holder {
+            is_category,
+            title,
+            outline,
+        });
+    }
+    // Recurse AFTER all appends so a merged parent's children are
+    // normalized as one level (e.g. "Sub" siblings that each came from a
+    // different duplicate "Top" also merge).
+    *outlines = groups
+        .into_iter()
+        .map(|mut holder| {
+            merge_sibling_categories(&mut holder.outline.outlines);
+            holder.outline
+        })
+        .collect();
+}
+
 pub fn classify(entries: &[OpmlEntry], existing: &[ExistingFeed]) -> Classification {
     let mut conflicts = Vec::new();
     let mut skipped = HashSet::new();
@@ -311,6 +354,7 @@ pub fn build_cleaned_opml(
 
     let mut index = 0usize;
     filter_outlines(&mut doc.body.outlines, &mut index, &keep);
+    merge_sibling_categories(&mut doc.body.outlines);
     let cleaned = doc
         .to_string()
         .map_err(|e| anyhow::anyhow!("serialize opml: {e}"))?;
@@ -560,5 +604,122 @@ mod tests {
         let cleaned_entries = parse_entries(&cleaned).unwrap();
         assert_eq!(cleaned_entries.len(), 1);
         assert_eq!(cleaned_entries[0].title, "Three");
+    }
+
+    #[test]
+    fn build_cleaned_opml_merges_sibling_categories_with_same_title() {
+        let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Tech" title="Tech">
+      <outline text="Feed A" title="Feed A" type="rss" xmlUrl="https://example.com/a"/>
+    </outline>
+    <outline text="Tech" title="Tech">
+      <outline text="Feed B" title="Feed B" type="rss" xmlUrl="https://example.com/b"/>
+    </outline>
+  </body>
+</opml>"#;
+        let entries = parse_entries(opml).unwrap();
+        let classification = classify(&entries, &[]);
+        let resolutions = vec![];
+        let (cleaned, added) =
+            build_cleaned_opml(opml, &entries, &classification, &resolutions).unwrap();
+        assert_eq!(added, 2);
+        let cleaned_entries = parse_entries(&cleaned).unwrap();
+        let categories: Vec<&str> = cleaned_entries
+            .iter()
+            .map(|e| e.category.as_str())
+            .collect();
+        assert_eq!(categories, vec!["Tech", "Tech"]);
+        let doc = opml::OPML::from_str(&cleaned).unwrap();
+        let cats: Vec<String> = doc.body.outlines.iter().map(outline_title).collect();
+        assert_eq!(
+            cats,
+            vec!["Tech"],
+            "two sibling 'Tech' outlines must merge into one"
+        );
+        assert_eq!(
+            doc.body.outlines[0].outlines.len(),
+            2,
+            "both feeds kept under the merged category"
+        );
+    }
+
+    #[test]
+    fn build_cleaned_opml_merges_nested_sibling_duplicates_but_not_across_parents() {
+        let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Top" title="Top">
+      <outline text="Sub" title="Sub">
+        <outline text="A" title="A" type="rss" xmlUrl="https://example.com/a"/>
+      </outline>
+      <outline text="Sub" title="Sub">
+        <outline text="B" title="B" type="rss" xmlUrl="https://example.com/b"/>
+      </outline>
+    </outline>
+    <outline text="Other" title="Other">
+      <outline text="Sub" title="Sub">
+        <outline text="C" title="C" type="rss" xmlUrl="https://example.com/c"/>
+      </outline>
+    </outline>
+  </body>
+</opml>"#;
+        let entries = parse_entries(opml).unwrap();
+        let classification = classify(&entries, &[]);
+        let (cleaned, added) = build_cleaned_opml(opml, &entries, &classification, &[]).unwrap();
+        assert_eq!(added, 3);
+        let doc = opml::OPML::from_str(&cleaned).unwrap();
+        assert_eq!(
+            doc.body.outlines.len(),
+            2,
+            "sibling 'Top'/'Other' outlines stay separate"
+        );
+        let top = &doc.body.outlines[0];
+        let other = &doc.body.outlines[1];
+        assert_eq!(outline_title(top), "Top");
+        assert_eq!(outline_title(other), "Other");
+        assert_eq!(
+            top.outlines.len(),
+            1,
+            "nested sibling 'Sub' outlines merge into one"
+        );
+        assert_eq!(outline_title(&top.outlines[0]), "Sub");
+        assert_eq!(
+            top.outlines[0].outlines.len(),
+            2,
+            "A and B kept under the merged 'Sub'"
+        );
+        assert_eq!(
+            other.outlines.len(),
+            1,
+            "'Sub' under 'Other' is a distinct category"
+        );
+        assert_eq!(
+            other.outlines[0].outlines.len(),
+            1,
+            "C kept under 'Other'/'Sub'"
+        );
+    }
+
+    #[test]
+    fn build_cleaned_opml_does_not_merge_feeds_with_same_title() {
+        let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Feed X" title="Feed X" type="rss" xmlUrl="https://example.com/x"/>
+    <outline text="Feed X" title="Feed X" type="rss" xmlUrl="https://example.com/y"/>
+  </body>
+</opml>"#;
+        let entries = parse_entries(opml).unwrap();
+        let classification = classify(&entries, &[]);
+        let (cleaned, added) = build_cleaned_opml(opml, &entries, &classification, &[]).unwrap();
+        assert_eq!(added, 2);
+        let cleaned_entries = parse_entries(&cleaned).unwrap();
+        assert_eq!(
+            cleaned_entries.len(),
+            2,
+            "same-title feeds with different URLs stay distinct"
+        );
     }
 }
