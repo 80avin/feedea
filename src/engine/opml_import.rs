@@ -270,10 +270,11 @@ pub fn build_cleaned_opml(
     keys.sort();
     for key in keys {
         let conflict = conflict_by_key[key];
-        if conflict.kind == ConflictKind::IntraFile && keep_new.contains(key) {
-            if let Some(n) = normalize_url(&conflict.opml.url) {
-                intra_winner.insert(n, conflict.opml.index);
-            }
+        if conflict.kind == ConflictKind::IntraFile
+            && keep_new.contains(key)
+            && let Some(n) = normalize_url(&conflict.opml.url)
+        {
+            intra_winner.insert(n, conflict.opml.index);
         }
     }
 
@@ -302,7 +303,7 @@ pub fn build_cleaned_opml(
                     }
                 }
             }
-        } else if winner.map_or(true, |w| w == entry.index) {
+        } else if winner.is_none_or(|w| w == entry.index) {
             // brand-new feed
             keep.insert(entry.index);
         }
