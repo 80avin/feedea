@@ -722,4 +722,49 @@ mod tests {
             "same-title feeds with different URLs stay distinct"
         );
     }
+
+    #[test]
+    fn build_cleaned_opml_merges_sibling_categories_with_empty_resolved_title() {
+        let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="" title="">
+      <outline text="Feed A" title="Feed A" type="rss" xmlUrl="https://example.com/a"/>
+    </outline>
+    <outline text="" title="">
+      <outline text="Feed B" title="Feed B" type="rss" xmlUrl="https://example.com/b"/>
+    </outline>
+    <outline text="Feed X" title="Feed X" type="rss" xmlUrl="https://example.com/x"/>
+    <outline text="Feed X" title="Feed X" type="rss" xmlUrl="https://example.com/y"/>
+  </body>
+</opml>"#;
+        let entries = parse_entries(opml).unwrap();
+        let classification = classify(&entries, &[]);
+        let (cleaned, added) = build_cleaned_opml(opml, &entries, &classification, &[]).unwrap();
+        assert_eq!(added, 4);
+        let cleaned_entries = parse_entries(&cleaned).unwrap();
+        assert_eq!(cleaned_entries.len(), 4);
+        let doc = opml::OPML::from_str(&cleaned).unwrap();
+        let cats: Vec<String> = doc.body.outlines.iter().map(outline_title).collect();
+        assert_eq!(
+            cats,
+            vec!["", "Feed X", "Feed X"],
+            "two sibling empty-title/empty-text outlines must merge into one"
+        );
+        assert_eq!(
+            doc.body.outlines[0].outlines.len(),
+            2,
+            "both feeds kept under the merged empty-title category"
+        );
+        assert_eq!(
+            doc.body.outlines[1].outlines.len(),
+            0,
+            "same-title feeds stay separate"
+        );
+        assert_eq!(
+            doc.body.outlines[2].outlines.len(),
+            0,
+            "same-title feeds stay separate"
+        );
+    }
 }
