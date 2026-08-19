@@ -50,6 +50,14 @@ export default function OpmlConflictDialog({
   const choiceFor = (conflict: OpmlConflict): OpmlResolution =>
     choices[conflict.key] ?? initialChoices[conflict.key] ?? defaultResolution(conflict);
 
+  const selectAllNew = () => {
+    setChoices(Object.fromEntries(conflicts.map((c) => [c.key, { key: c.key, action: "keep-new" }])));
+  };
+
+  const selectAllExisting = () => {
+    setChoices(Object.fromEntries(conflicts.map((c) => [c.key, defaultResolution(c)])));
+  };
+
   const selectedMatch = (conflict: OpmlConflict): OpmlExistingFeed | undefined => {
     const choice = choiceFor(conflict);
     if (choice.action !== "keep-existing") return undefined;
@@ -86,6 +94,14 @@ export default function OpmlConflictDialog({
               <p className="text-sm text-app-text-muted">
                 The imported file has {conflicts.length} feed{conflicts.length > 1 ? "s" : ""} that match existing sources. Choose which to keep.
               </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="secondary" onPress={selectAllNew} isDisabled={importOpml.isPending}>
+                  Select all new
+                </Button>
+                <Button size="sm" variant="secondary" onPress={selectAllExisting} isDisabled={importOpml.isPending}>
+                  Select all existing
+                </Button>
+              </div>
               <div className="mt-4 flex flex-col gap-4">
                 {conflicts.map((conflict) => {
                   const choice = choiceFor(conflict);
