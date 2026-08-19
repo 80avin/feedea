@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Button, Modal, useOverlayState } from "@heroui/react";
 import { useImportOpml } from "../state/hooks";
-import type { ImportOpmlResponse, OpmlConflict, OpmlResolution } from "../api/types";
+import type { ImportOpmlResponse, OpmlConflict, OpmlExistingFeed, OpmlResolution } from "../api/types";
 
 export default function OpmlConflictDialog({
   open,
@@ -29,6 +30,18 @@ export default function OpmlConflictDialog({
     return { key: conflict.key, action: "keep-new" };
   };
 
+  function fieldChanged(a: string, b: string): boolean {
+    const na = (a ?? "").trim().toLowerCase();
+    const nb = (b ?? "").trim().toLowerCase();
+    return na !== nb && na !== "" && nb !== "";
+  }
+
+  function changedClass(changed: boolean): string {
+    return changed
+      ? "rounded bg-amber-500/10 px-1 text-amber-700 dark:text-amber-400"
+      : "";
+  }
+
   const initialChoices = useMemo(
     () => Object.fromEntries(conflicts.map((c) => [c.key, defaultResolution(c)])),
     [open, conflicts],
@@ -36,6 +49,12 @@ export default function OpmlConflictDialog({
 
   const choiceFor = (conflict: OpmlConflict): OpmlResolution =>
     choices[conflict.key] ?? initialChoices[conflict.key] ?? defaultResolution(conflict);
+
+  const selectedMatch = (conflict: OpmlConflict): OpmlExistingFeed | undefined => {
+    const choice = choiceFor(conflict);
+    if (choice.action !== "keep-existing") return undefined;
+    return conflict.matches.find((m) => m.id === choice.keep_existing_feed_id);
+  };
 
   const submit = async () => {
     setError("");
@@ -72,56 +91,83 @@ export default function OpmlConflictDialog({
                   const choice = choiceFor(conflict);
                   return (
                     <div key={conflict.key} className="rounded-lg border border-app-border p-3">
-                      <p className="text-xs font-medium uppercase tracking-wider text-app-text-faint">{kindLabel[conflict.kind]}</p>
-                      <div className="mt-2 flex items-start gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-app-text">{conflict.opml.title}</p>
-                          <p className="truncate text-xs text-app-text-muted">{conflict.opml.url}</p>
-                          <p className="truncate text-xs text-app-text-faint">{conflict.opml.category || "Uncategorized"}</p>
-                        </div>
-                        <div className="flex shrink-0 flex-col gap-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium uppercase tracking-wider text-app-text-faint">{kindLabel[conflict.kind]}</p>
+                        <span className="flex shrink-0 items-center gap-1">
+                          <BulkChoiceButton
+                            active={choice.action === "keep-new"}
+                            onClick={() => setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "keep-new" } }))}
+                          >
+                            Keep new
+                          </BulkChoiceButton>
+                          {conflict.matches.map((match) => (
+                            <BulkChoiceButton
+                              key={match.id}
+                              active={choice.action === "keep-existing" && choice.keep_existing_feed_id === match.id}
+                              onClick={() =>
+                                setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "keep-existing", keep_existing_feed_id: match.id } }))
+                              }
+                            >
+                              {match.id.startsWith("__file__:") ? "Keep first" : "Keep existing"}
+                            </BulkChoiceButton>
+                          ))}
+                          <BulkChoiceButton
+                            active={choice.action === "skip"}
+                            onClick={() => setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "skip" } }))}
+                          >
+                            Skip
+                          </BulkChoiceButton>
+                        </span>
+                      </div>
+
+                      <p className="mt-2 truncate text-xs text-app-text-muted">{conflict.opml.url}</p>
+
+                      <div className="mt-3 grid grid-cols-2 gap-3">
+                        <div className="min-w-0 rounded-md border border-app-border bg-app-surface/60 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-app-text-faint">Old</p>
                           {conflict.matches
                             .filter((m) => !m.id.startsWith("__file__:") || conflict.matches.every((x) => x.id.startsWith("__file__:")))
-                            .map((match) => (
-                            <label key={match.id} className="flex items-center gap-2 text-sm text-app-text-2">
-                              <input
-                                type="radio"
-                                name={`conflict-${conflict.key}`}
-                                checked={choice.action === "keep-existing" && choice.keep_existing_feed_id === match.id}
-                                onChange={() =>
-                                  setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "keep-existing", keep_existing_feed_id: match.id } }))
-                                }
-                              />
-                              <span className="min-w-0">
-                                <span className="block truncate">{match.title}</span>
-                                <span className="block truncate text-xs text-app-text-faint">{match.url ?? ""}</span>
-                              </span>
-                            </label>
-                          ))}
-                          <label className="flex items-center gap-2 text-sm text-app-text-2">
+                            .map((match) => {
+                              const isSelected = choice.action === "keep-existing" && choice.keep_existing_feed_id === match.id;
+                              return (
+                                <label key={match.id} className={`mt-2 flex cursor-pointer items-start gap-2 rounded p-1 text-sm ${isSelected ? "bg-app-selected/60" : ""}`}>
+                                  <input
+                                    type="radio"
+                                    name={`conflict-${conflict.key}`}
+                                    checked={isSelected}
+                                    onChange={() =>
+                                      setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "keep-existing", keep_existing_feed_id: match.id } }))
+                                    }
+                                    className="mt-0.5"
+                                  />
+                                  <span className="min-w-0 flex-1">
+                                    <span className={`block ${changedClass(fieldChanged(match.title, conflict.opml.title))}`}>{match.title}</span>
+                                    <span className={`block text-xs ${changedClass(fieldChanged(match.category, conflict.opml.category))}`}>{match.category || "Uncategorized"}</span>
+                                    {fieldChanged(match.url ?? "", conflict.opml.url) && (
+                                      <span className="block truncate text-xs text-app-text-faint">{match.url}</span>
+                                    )}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                        </div>
+                        <div className="min-w-0 rounded-md border border-app-border bg-app-surface/60 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-app-text-faint">New</p>
+                          <label className="mt-2 flex cursor-pointer items-start gap-2 rounded p-1 text-sm">
                             <input
                               type="radio"
                               name={`conflict-${conflict.key}`}
                               checked={choice.action === "keep-new"}
-                              onChange={() =>
-                                setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "keep-new" } }))
-                              }
+                              onChange={() => setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "keep-new" } }))}
+                              className="mt-0.5"
                             />
-                            <span>
-                              <span className="block">Keep new</span>
-                              <span className="block truncate text-xs text-app-text-faint">{conflict.opml.url}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className={`block ${changedClass(fieldChanged(selectedMatch(conflict)?.title ?? "", conflict.opml.title))}`}>{conflict.opml.title}</span>
+                              <span className={`block text-xs ${changedClass(fieldChanged(selectedMatch(conflict)?.category ?? "", conflict.opml.category))}`}>{conflict.opml.category || "Uncategorized"}</span>
+                              {fieldChanged(selectedMatch(conflict)?.url ?? "", conflict.opml.url) && (
+                                <span className="block truncate text-xs text-app-text-faint">{conflict.opml.url}</span>
+                              )}
                             </span>
-                          </label>
-                          <label className="flex items-center gap-2 text-sm text-app-text-2">
-                            <input
-                              type="radio"
-                              name={`conflict-${conflict.key}`}
-                              checked={choice.action === "skip"}
-                              onChange={() =>
-                                setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "skip" } }))
-                              }
-                            />
-                            <span>Skip</span>
                           </label>
                         </div>
                       </div>
@@ -143,5 +189,29 @@ export default function OpmlConflictDialog({
         </Modal.Container>
       </Modal.Backdrop>
     </Modal>
+  );
+}
+
+function BulkChoiceButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
+        active
+          ? "border-accent bg-accent-soft text-accent-soft-foreground"
+          : "border-app-border text-app-text-muted hover:bg-app-hover/60 hover:text-app-text"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
