@@ -289,3 +289,93 @@ async fn overview_returns_per_category_cards_and_all_totals() {
     assert!(json["all"]["total_count"].as_i64().unwrap() >= 2);
     assert!(json["all"]["unread_count"].as_i64().unwrap() >= 2);
 }
+
+#[tokio::test]
+async fn overview_shows_full_category_path() {
+    let (feed_url, app, _server) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+
+    let parent_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/categories")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(r#"{"name":"Top"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let parent_id = serde_json::from_slice::<serde_json::Value>(
+        &parent_resp.into_body().collect().await.unwrap().to_bytes(),
+    )
+    .unwrap()["category_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let child_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/categories")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(format!(
+                    r#"{{"name":"Sub","parent_id":"{parent_id}"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let child_id = serde_json::from_slice::<serde_json::Value>(
+        &child_resp.into_body().collect().await.unwrap().to_bytes(),
+    )
+    .unwrap()["category_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let add_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(format!(
+                    r#"{{"url":"{feed_url}","title":"F","category_id":"{child_id}"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(add_resp.status(), StatusCode::OK);
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/overview")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let cards = json["cards"].as_array().unwrap();
+    let child = cards
+        .iter()
+        .find(|card| card["category_id"] == child_id)
+        .expect("child card should exist");
+    assert_eq!(
+        child["name"], "Top / Sub",
+        "overview card shows the full category path, not just the leaf"
+    );
+}

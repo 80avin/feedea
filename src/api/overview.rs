@@ -8,7 +8,8 @@ use crate::dto::CategoryCard;
 use news_flash::models::{ArticleFilter, ArticleOrder, CategoryID, OrderBy};
 
 pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
-    let (categories, _category_mappings) = state.engine.get_categories().await?;
+    let (categories, category_mappings) = state.engine.get_categories().await?;
+    let path_by_id = crate::engine::opml_import::category_paths(&categories, &category_mappings);
     let db_path = state.engine.data_dir().join("engine/data/database.sqlite");
     let totals = crate::engine::queries::category_totals(&db_path)?;
     let category_unread = state.engine.category_unread_map().await?;
@@ -17,24 +18,25 @@ pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
     let mut cards = Vec::new();
     for cat in categories {
         seen.insert(cat.category_id.as_str().to_string());
-        cards.push(
-            build_card(
-                &state,
-                &cat.category_id,
-                cat.label,
-                &totals,
-                &category_unread,
-            )
-            .await?,
-        );
+        let name = path_by_id
+            .get(cat.category_id.as_str())
+            .filter(|p| !p.is_empty())
+            .map(|p| p.join(" / "))
+            .unwrap_or_else(|| cat.label.clone());
+        cards.push(build_card(&state, &cat.category_id, name, &totals, &category_unread).await?);
     }
     for t in &totals {
         if seen.insert(t.category_id.clone()) {
+            let name = path_by_id
+                .get(&t.category_id)
+                .filter(|p| !p.is_empty())
+                .map(|p| p.join(" / "))
+                .unwrap_or_else(|| t.category_id.clone());
             cards.push(
                 build_card(
                     &state,
                     &CategoryID::new(&t.category_id),
-                    t.category_id.clone(),
+                    name,
                     &totals,
                     &category_unread,
                 )
