@@ -152,7 +152,7 @@ export interface OpmlEntry {
   index: number;
   title: string;
   url: string;
-  category: string;
+  category: string[];
 }
 
 export interface OpmlExistingFeed {
@@ -160,14 +160,15 @@ export interface OpmlExistingFeed {
   title: string;
   url: string | null;
   website: string | null;
-  category: string;
+  category: string[];
 }
 
 export interface OpmlConflict {
   key: number;
-  kind: "url-identical" | "url-variant" | "intra-file";
+  kind: "same-feed" | "intra-file";
   opml: OpmlEntry;
   matches: OpmlExistingFeed[];
+  occurrences?: number;
 }
 
 export interface OpmlResolution {
@@ -179,6 +180,7 @@ export interface OpmlResolution {
 export interface ImportOpmlResponse {
   status: "imported" | "conflicts";
   added?: number;
+  updated?: number;
   skipped?: number;
   migrated?: number;
   conflicts_resolved?: number;

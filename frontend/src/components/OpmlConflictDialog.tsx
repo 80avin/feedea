@@ -36,6 +36,15 @@ export default function OpmlConflictDialog({
     return na !== nb && na !== "" && nb !== "";
   }
 
+  function categoryLabel(category: string[]): string {
+    return category.length > 0 ? category.join(" / ") : "Uncategorized";
+  }
+
+  function categoryChanged(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) return true;
+    return a.some((seg, i) => fieldChanged(seg, b[i]));
+  }
+
   function changedClass(changed: boolean): string {
     return changed
       ? "rounded bg-amber-500/10 px-1 text-amber-700 dark:text-amber-400"
@@ -60,8 +69,14 @@ export default function OpmlConflictDialog({
 
   const selectedMatch = (conflict: OpmlConflict): OpmlExistingFeed | undefined => {
     const choice = choiceFor(conflict);
-    if (choice.action !== "keep-existing") return undefined;
-    return conflict.matches.find((m) => m.id === choice.keep_existing_feed_id);
+    if (choice.action === "keep-existing") {
+      return conflict.matches.find((m) => m.id === choice.keep_existing_feed_id);
+    }
+    // No specific feed selected (keep-new/skip): highlight the file's version against
+    // the primary existing match so the New column isn't compared against "nothing".
+    return (
+      conflict.matches.find((m) => !m.id.startsWith("__file__:")) ?? conflict.matches[0]
+    );
   };
 
   const submit = async () => {
@@ -77,15 +92,14 @@ export default function OpmlConflictDialog({
   };
 
   const kindLabel: Record<OpmlConflict["kind"], string> = {
-    "url-identical": "Same feed URL, different details",
-    "url-variant": "Same feed, different URL",
+    "same-feed": "Same feed, different details",
     "intra-file": "Duplicate within the file",
   };
 
   return (
     <Modal state={state}>
       <Modal.Backdrop>
-        <Modal.Container className="max-w-2xl">
+        <Modal.Container size="cover" className="max-w-4xl">
           <Modal.Dialog>
             <Modal.Header>
               <Modal.Heading>Resolve duplicate feeds</Modal.Heading>
@@ -110,12 +124,6 @@ export default function OpmlConflictDialog({
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-medium uppercase tracking-wider text-app-text-faint">{kindLabel[conflict.kind]}</p>
                         <span className="flex shrink-0 items-center gap-1">
-                          <BulkChoiceButton
-                            active={choice.action === "keep-new"}
-                            onClick={() => setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "keep-new" } }))}
-                          >
-                            Keep new
-                          </BulkChoiceButton>
                           {conflict.matches.map((match) => (
                             <BulkChoiceButton
                               key={match.id}
@@ -128,6 +136,12 @@ export default function OpmlConflictDialog({
                             </BulkChoiceButton>
                           ))}
                           <BulkChoiceButton
+                            active={choice.action === "keep-new"}
+                            onClick={() => setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "keep-new" } }))}
+                          >
+                            Keep new
+                          </BulkChoiceButton>
+                          <BulkChoiceButton
                             active={choice.action === "skip"}
                             onClick={() => setChoices((prev) => ({ ...prev, [conflict.key]: { key: conflict.key, action: "skip" } }))}
                           >
@@ -137,6 +151,11 @@ export default function OpmlConflictDialog({
                       </div>
 
                       <p className="mt-2 truncate text-xs text-app-text-muted">{conflict.opml.url}</p>
+                      {(conflict.occurrences ?? 1) > 1 && (
+                        <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                          This source appears {conflict.occurrences}× in the file
+                        </p>
+                      )}
 
                       <div className="mt-3 grid grid-cols-2 gap-3">
                         <div className="min-w-0 rounded-md border border-app-border bg-app-surface/60 p-3">
@@ -158,7 +177,7 @@ export default function OpmlConflictDialog({
                                   />
                                   <span className="min-w-0 flex-1">
                                     <span className={`block ${changedClass(fieldChanged(match.title, conflict.opml.title))}`}>{match.title}</span>
-                                    <span className={`block text-xs ${changedClass(fieldChanged(match.category, conflict.opml.category))}`}>{match.category || "Uncategorized"}</span>
+                                    <span className={`block text-xs ${changedClass(categoryChanged(match.category, conflict.opml.category))}`}>{categoryLabel(match.category)}</span>
                                     {fieldChanged(match.url ?? "", conflict.opml.url) && (
                                       <span className="block truncate text-xs text-app-text-faint">{match.url}</span>
                                     )}
@@ -179,7 +198,7 @@ export default function OpmlConflictDialog({
                             />
                             <span className="min-w-0 flex-1">
                               <span className={`block ${changedClass(fieldChanged(selectedMatch(conflict)?.title ?? "", conflict.opml.title))}`}>{conflict.opml.title}</span>
-                              <span className={`block text-xs ${changedClass(fieldChanged(selectedMatch(conflict)?.category ?? "", conflict.opml.category))}`}>{conflict.opml.category || "Uncategorized"}</span>
+                              <span className={`block text-xs ${changedClass(categoryChanged(selectedMatch(conflict)?.category ?? [], conflict.opml.category))}`}>{categoryLabel(conflict.opml.category)}</span>
                               {fieldChanged(selectedMatch(conflict)?.url ?? "", conflict.opml.url) && (
                                 <span className="block truncate text-xs text-app-text-faint">{conflict.opml.url}</span>
                               )}

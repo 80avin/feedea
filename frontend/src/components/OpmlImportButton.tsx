@@ -7,7 +7,8 @@ import OpmlConflictDialog from "./OpmlConflictDialog";
 
 function summaryText(result: ImportOpmlResponse): string {
   const migrated = (result.migrated ?? 0) > 0 ? `, migrated ${result.migrated}` : "";
-  return `Imported ${result.added} feed(s), skipped ${result.skipped} duplicate(s)${migrated}`;
+  const updated = (result.updated ?? 0) > 0 ? `, updated ${result.updated}` : "";
+  return `Imported ${result.added} feed(s), skipped ${result.skipped} duplicate(s)${updated}${migrated}`;
 }
 
 export default function OpmlImportButton({ className }: { className?: string }) {

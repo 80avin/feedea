@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -40,18 +40,16 @@ pub struct ImportOpmlRequest {
 
 pub async fn list(State(state): State<AppState>) -> ApiResult<Json<Value>> {
     let feeds = state.engine.get_feeds().await?;
-    let (categories, _) = state.engine.get_categories().await?;
-    let name_by_id: HashMap<String, String> = categories
-        .into_iter()
-        .map(|c| (c.category_id.as_str().to_string(), c.label))
-        .collect();
+    let (categories, category_mappings) = state.engine.get_categories().await?;
+    let path_by_id = opml_import::category_paths(&categories, &category_mappings);
     let mut groups: Vec<SourceGroup> = Vec::new();
     for feed in feeds {
         let category_id = feed.category_id.clone();
-        let category_name = name_by_id
+        let category_name = path_by_id
             .get(&category_id)
-            .cloned()
-            .unwrap_or_else(|| category_id.clone());
+            .filter(|path| !path.is_empty())
+            .map(|path| path.join(" / "))
+            .unwrap_or_else(|| "Uncategorized".to_string());
         if let Some(group) = groups.iter_mut().find(|g| g.category_id == category_id) {
             group.feeds.push(feed);
         } else {
@@ -154,11 +152,8 @@ pub async fn import_opml(
     Json(req): Json<ImportOpmlRequest>,
 ) -> ApiResult<Json<Value>> {
     let feeds = state.engine.get_feeds().await?;
-    let (categories, _) = state.engine.get_categories().await?;
-    let name_by_id: HashMap<String, String> = categories
-        .into_iter()
-        .map(|c| (c.category_id.as_str().to_string(), c.label))
-        .collect();
+    let (categories, category_mappings) = state.engine.get_categories().await?;
+    let category_path_by_id = opml_import::category_paths(&categories, &category_mappings);
     let existing: Vec<ExistingFeed> = feeds
         .into_iter()
         .map(|f| ExistingFeed {
@@ -166,16 +161,12 @@ pub async fn import_opml(
             title: f.title.clone(),
             url: f.feed_url.clone(),
             website: f.website.clone(),
-            category: if f.category_id == "NewsFlash.Toplevel" {
-                // OPML feeds with no category outline have category ""; exposing the
-                // toplevel id would turn perfect duplicates into false url-identical conflicts.
-                String::new()
-            } else {
-                name_by_id
-                    .get(&f.category_id)
-                    .cloned()
-                    .unwrap_or_else(|| f.category_id.clone())
-            },
+            // an uncategorized feed's category_id is the toplevel id, which
+            // category_paths excludes, so it falls back to the empty path
+            category: category_path_by_id
+                .get(&f.category_id)
+                .cloned()
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -243,63 +234,87 @@ pub async fn import_opml(
     let mut migrated: u64 = 0;
     let mut conflicts_resolved: usize = 0;
     let mut skipped: usize = classification.exact_duplicates;
+    let mut updated: usize = 0;
+    // Feeds replaced by a variant keep-new. A file may hold several entries whose
+    // normalized url matches the same existing feed; once one resolution removes it,
+    // later resolutions for that feed must no-op instead of erroring on a gone feed.
+    let mut removed: HashSet<String> = HashSet::new();
     for resolution in &resolutions {
-        let conflict = conflict_by_key.get(&resolution.key).unwrap();
+        let Some(conflict) = conflict_by_key.get(&resolution.key) else {
+            return Err(ApiError::bad_request("unknown resolution key"));
+        };
         conflicts_resolved += 1;
         match resolution.action {
             ResolutionAction::KeepNew => match conflict.kind {
-                ConflictKind::UrlVariant => {
-                    for matched in &conflict.matches {
-                        if matched.id.starts_with("__file__:") {
-                            continue;
-                        }
-                        // run the direct-SQLite migration under the engine's mutation lock
-                        // (it would deadlock if held across remove_feed, which takes the same lock)
-                        {
-                            let _guard = state.engine.mutation_guard().await;
-                            migrated += opml_import::migrate_feed_articles(
-                                &db_path,
-                                &matched.id,
-                                &conflict.opml.url,
-                            )?;
-                        }
-                        state.engine.remove_feed(&matched.id).await?;
-                        skipped += 1;
-                    }
-                }
-                ConflictKind::UrlIdentical => {
-                    // matches[0] may be a url-variant duplicate of the id-match feed;
-                    // always act on the feed whose id equals the opml url (classify
-                    // guarantees it is in matches, since this branch requires an id match)
-                    let existing_id = conflict
-                        .matches
-                        .iter()
-                        .find(|m| m.id == conflict.opml.url)
-                        .expect("url-identical conflict always contains the id-match feed");
-                    if conflict.opml.title != existing_id.title {
-                        state
-                            .engine
-                            .rename_feed(&existing_id.id, &conflict.opml.title)
-                            .await?;
-                    }
-                    if !conflict.opml.category.is_empty()
-                        && conflict.opml.category != existing_id.category
+                ConflictKind::SameFeed => {
+                    if let Some(existing_id) =
+                        conflict.matches.iter().find(|m| m.id == conflict.opml.url)
                     {
-                        let (categories, _) = state.engine.get_categories().await?;
-                        let category_id = categories
-                            .iter()
-                            .find(|c| c.label == conflict.opml.category)
-                            .map(|c| c.category_id.as_str().to_string())
-                            .unwrap_or_else(|| {
-                                // when added == 0 the cleaned opml is never imported, so a
-                                // brand-new category was never created and the move no-ops
-                                String::new()
-                            });
-                        if !category_id.is_empty() {
-                            state
-                                .engine
-                                .move_feed(&existing_id.id, &category_id)
-                                .await?;
+                        // The file's url equals the existing feed's id: keep-new means
+                        // updating that feed's details in place.
+                        let mut changed = false;
+                        if !removed.contains(&existing_id.id) {
+                            if conflict.opml.title != existing_id.title {
+                                state
+                                    .engine
+                                    .rename_feed(&existing_id.id, &conflict.opml.title)
+                                    .await?;
+                                changed = true;
+                            }
+                            if conflict.opml.category != existing_id.category {
+                                // Re-fetch after the import: a keep-new of other entries
+                                // may have created the nested categories this entry targets.
+                                let (categories, category_mappings) =
+                                    state.engine.get_categories().await?;
+                                let mut path_by_id =
+                                    opml_import::category_paths(&categories, &category_mappings);
+                                let category_id = if conflict.opml.category.is_empty() {
+                                    // The file places the feed at the root: move it out of
+                                    // its current category to the toplevel.
+                                    Some(
+                                        news_flash::models::NEWSFLASH_TOPLEVEL.as_str().to_string(),
+                                    )
+                                } else {
+                                    ensure_category_path(
+                                        &state,
+                                        &conflict.opml.category,
+                                        &mut path_by_id,
+                                    )
+                                    .await?
+                                };
+                                if let Some(category_id) = category_id {
+                                    state
+                                        .engine
+                                        .move_feed(&existing_id.id, &category_id)
+                                        .await?;
+                                    changed = true;
+                                }
+                            }
+                            if changed {
+                                updated += 1;
+                            }
+                        }
+                    } else {
+                        // The file's url is a variant of the existing feed(s): keep-new
+                        // replaces them with a feed whose id is the file's url.
+                        for matched in &conflict.matches {
+                            if matched.id.starts_with("__file__:") || removed.contains(&matched.id)
+                            {
+                                continue;
+                            }
+                            // run the direct-SQLite migration under the engine's mutation lock
+                            // (it would deadlock if held across remove_feed, which takes the same lock)
+                            {
+                                let _guard = state.engine.mutation_guard().await;
+                                migrated += opml_import::migrate_feed_articles(
+                                    &db_path,
+                                    &matched.id,
+                                    &conflict.opml.url,
+                                )?;
+                            }
+                            state.engine.remove_feed(&matched.id).await?;
+                            removed.insert(matched.id.clone());
+                            skipped += 1;
                         }
                     }
                 }
@@ -313,6 +328,7 @@ pub async fn import_opml(
     Ok(Json(json!({
         "status": "imported",
         "added": added,
+        "updated": updated,
         "skipped": skipped,
         "migrated": migrated,
         "conflicts_resolved": conflicts_resolved,
@@ -348,4 +364,60 @@ async fn ensure_feed_exists(state: &AppState, id: &str) -> Result<(), ApiError> 
     } else {
         Err(ApiError::not_found("feed not found"))
     }
+}
+
+/// Find the category id for an OPML category path by exact full-path match only. A
+/// partial or flat match must not stand in for the file's declared structure: if the
+/// path isn't present, `ensure_category_path` creates it properly nested rather than
+/// silently placing the feed somewhere the file did not ask for.
+fn find_category_id_for_path(
+    path: &[String],
+    path_by_id: &HashMap<String, Vec<String>>,
+) -> Option<String> {
+    if path.is_empty() {
+        return None;
+    }
+    path_by_id
+        .iter()
+        .find(|(_, p)| p.as_slice() == path)
+        .map(|(id, _)| id.clone())
+}
+
+/// Resolve an OPML category path to a category id for a keep-new move, creating the
+/// missing categories along the path on demand (when a plain import added nothing and
+/// therefore never created the file's category tree). Reuses any already-existing
+/// segments; new ids are recorded in `path_by_id` so sibling segments match them.
+async fn ensure_category_path(
+    state: &AppState,
+    path: &[String],
+    path_by_id: &mut HashMap<String, Vec<String>>,
+) -> anyhow::Result<Option<String>> {
+    if path.is_empty() {
+        return Ok(None);
+    }
+    if let Some(id) = find_category_id_for_path(path, path_by_id) {
+        return Ok(Some(id));
+    }
+    let mut parent_id: Option<String> = None;
+    let mut current_path = Vec::new();
+    for segment in path {
+        current_path.push(segment.clone());
+        let id = match path_by_id
+            .iter()
+            .find(|(_, p)| p.as_slice() == current_path.as_slice())
+            .map(|(id, _)| id.clone())
+        {
+            Some(id) => id,
+            None => {
+                let id = state
+                    .engine
+                    .add_category(segment, parent_id.as_deref())
+                    .await?;
+                path_by_id.insert(id.clone(), current_path.clone());
+                id
+            }
+        };
+        parent_id = Some(id);
+    }
+    Ok(parent_id)
 }

@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { Button, Radio, RadioGroup } from "@heroui/react";
-import { ArrowRightStartOnRectangleIcon, CheckIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
+import { ArrowRightStartOnRectangleIcon, CheckIcon, Cog6ToothIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useSession } from "../auth/useSession";
-import { useChangePassword, useSettings, useUpdateSettings } from "../state/hooks";
+import {
+  useChangePassword,
+  useDeleteEmptyCategories,
+  useSettings,
+  useUpdateSettings,
+} from "../state/hooks";
 import { ErrorState, LoadingState, formatError } from "../components/Feedback";
 import { ACCENTS } from "../theme/useTheme";
 import { ArrowLeftEndOnRectangleIcon, ComputerDesktopIcon, MoonIcon, SunIcon } from "@heroicons/react/24/solid";
@@ -29,6 +34,7 @@ export default function Settings() {
   const { data, isLoading, isError, error, refetch } = useSettings();
   const updateSettings = useUpdateSettings();
   const changePassword = useChangePassword();
+  const deleteEmptyCategories = useDeleteEmptyCategories();
   const { installPrompt, isInstalled } = usePwa();
 
   const [theme, setTheme] = useState("system");
@@ -44,6 +50,22 @@ export default function Settings() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordBanner, setPasswordBanner] = useState("");
+  const [adminBanner, setAdminBanner] = useState("");
+
+  const deleteEmpty = async () => {
+    setAdminBanner("");
+    try {
+      const res = await deleteEmptyCategories.mutateAsync();
+      const count = res.deleted.length;
+      setAdminBanner(
+        count === 0
+          ? "No empty categories found."
+          : `Deleted ${count} empty categor${count === 1 ? "y" : "ies"}.`,
+      );
+    } catch (e) {
+      setAdminBanner(formatError(e));
+    }
+  };
 
   useEffect(() => {
     if (data && !dirty) {
@@ -257,6 +279,25 @@ export default function Settings() {
               </div>
             </section>
           )}
+
+          <section className="flex flex-col gap-3 rounded-lg border border-app-border p-4">
+            <h3 className="text-sm font-semibold">Advanced</h3>
+            <p className="text-xs text-app-text-faint">
+              Administrative maintenance actions. These affect data immediately.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="ghost"
+                onPress={deleteEmpty}
+                isDisabled={deleteEmptyCategories.isPending}
+              >
+                <TrashIcon className="h-4 w-4" />
+                {deleteEmptyCategories.isPending ? "Deleting…" : "Delete empty categories"}
+              </Button>
+              {adminBanner && <span className="text-sm text-app-text-muted">{adminBanner}</span>}
+            </div>
+          </section>
 
           <section className="flex flex-col gap-3 rounded-lg border border-app-border p-4">
             <p>Install to homescreen</p>

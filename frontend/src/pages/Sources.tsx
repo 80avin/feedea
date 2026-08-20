@@ -43,6 +43,13 @@ export default function Sources() {
   const { data, isLoading, isError, error, refetch } = useSources();
   const [addOpen, setAddOpen] = useState(false);
   const groups = data?.groups ?? [];
+  const sortedGroups = [...groups].sort((a, b) => {
+    const an = a.category_name.toLowerCase();
+    const bn = b.category_name.toLowerCase();
+    if (an === "uncategorized") return 1;
+    if (bn === "uncategorized") return -1;
+    return an.localeCompare(bn);
+  });
   const totalFeeds = groups.reduce((sum, group) => sum + group.feeds.length, 0);
 
   return (
@@ -74,15 +81,17 @@ export default function Sources() {
         )}
         {data &&
           totalFeeds > 0 &&
-          groups.map((group) => (
+          sortedGroups.map((group) => (
             <section key={group.category_id} className="mb-4">
               <h3 className="px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-app-text-faint">
                 {group.category_name}
               </h3>
               <ul className="flex flex-col gap-0.5">
-                {group.feeds.map((feed) => (
-                  <SourceRow key={feed.id} feed={feed} />
-                ))}
+                {[...group.feeds]
+                  .sort((x, y) => x.title.toLowerCase().localeCompare(y.title.toLowerCase()))
+                  .map((feed) => (
+                    <SourceRow key={feed.id} feed={feed} />
+                  ))}
               </ul>
             </section>
           ))}

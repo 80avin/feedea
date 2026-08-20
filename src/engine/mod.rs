@@ -4,9 +4,7 @@ use std::sync::Arc;
 use news_flash::NewsFlash;
 use news_flash::error::NewsFlashError;
 use news_flash::feed_api::FeedHeaderMap;
-use news_flash::models::{
-    ArticleFilter, CategoryID, FeedID, FeedMapping, Marked, PluginID, Read, Url,
-};
+use news_flash::models::{ArticleFilter, CategoryID, FeedID, Marked, PluginID, Read, Url};
 
 pub struct Discovered {
     pub title: Option<String>,
@@ -203,17 +201,21 @@ impl Engine {
 
     pub async fn move_feed(&self, id: &str, to_category: &str) -> anyhow::Result<()> {
         let _guard = self.mutation_guard().await;
-        let (_, mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
-        let from = mappings
-            .into_iter()
-            .find(|m| m.feed_id.as_str() == id)
-            .ok_or_else(|| anyhow::anyhow!("feed not found"))?;
-        let to = FeedMapping {
-            feed_id: from.feed_id.clone(),
-            category_id: news_flash::models::CategoryID::new(to_category),
-            sort_index: from.sort_index,
-        };
-        self.nf.move_feed(&from, &to, &self.client).await?;
+        // news-flash's move_feed only rewrites the first mapping it finds, so a stale
+        // toplevel/Uncategorized row (or a second category) can linger and make a feed
+        // show up in Uncategorized too. The app treats a feed as single-category, so set
+        // it to exactly one category: drop every existing mapping and insert the target.
+        let db_path = self.data_dir.join("engine/data/database.sqlite");
+        let conn = rusqlite::Connection::open(&db_path)?;
+        conn.busy_timeout(std::time::Duration::from_secs(10))?;
+        conn.execute(
+            "DELETE FROM feed_mapping WHERE feed_id = ?1",
+            rusqlite::params![id],
+        )?;
+        conn.execute(
+            "INSERT INTO feed_mapping (feed_id, category_id, sort_index) VALUES (?1, ?2, ?3)",
+            rusqlite::params![id, to_category, i32::MAX],
+        )?;
         Ok(())
     }
 
@@ -254,15 +256,31 @@ impl Engine {
     pub async fn get_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
         let unread = self.with_nf(|nf| nf.unread_count_feed_map(false)).await?;
         let (feeds, mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
-        let category_by_feed: HashMap<String, String> = mappings
-            .into_iter()
-            .map(|m| {
-                (
-                    m.feed_id.as_str().to_string(),
-                    m.category_id.as_str().to_string(),
-                )
-            })
-            .collect();
+        // A feed can have several mappings (news-flash supports multi-category, and a
+        // stale toplevel/Uncategorized row can linger after a move). The app treats a
+        // feed as single-category, so pick a real category over the toplevel, and do so
+        // deterministically.
+        let toplevel = "NewsFlash.Toplevel";
+        let mut category_by_feed: HashMap<String, String> = HashMap::new();
+        let mut mappings: Vec<_> = mappings.into_iter().collect();
+        mappings.sort_by(|a, b| {
+            let ak = (
+                a.category_id.as_str() == toplevel,
+                a.feed_id.as_str(),
+                a.category_id.as_str(),
+            );
+            let bk = (
+                b.category_id.as_str() == toplevel,
+                b.feed_id.as_str(),
+                b.category_id.as_str(),
+            );
+            ak.cmp(&bk)
+        });
+        for m in mappings {
+            category_by_feed
+                .entry(m.feed_id.as_str().to_string())
+                .or_insert_with(|| m.category_id.as_str().to_string());
+        }
         let mut out = Vec::with_capacity(feeds.len());
         for feed in feeds {
             let id = feed.feed_id.as_str().to_string();
@@ -361,6 +379,50 @@ impl Engine {
             )
             .await?;
         Ok(())
+    }
+
+    /// Delete every category that has no feeds and no child categories, returning the
+    /// labels of what was removed. Repeats so that a parent left empty by the removal of
+    /// a child is also cleaned up.
+    pub async fn delete_empty_categories(&self) -> anyhow::Result<Vec<String>> {
+        use news_flash::models::{CategoryID, NEWSFLASH_TOPLEVEL};
+        let _guard = self.mutation_guard().await;
+        let mut deleted: Vec<String> = Vec::new();
+        loop {
+            let (categories, category_mappings) = self.nf.get_categories()?;
+            let (_, feed_mappings) = self.nf.get_feeds()?;
+            let toplevel = NEWSFLASH_TOPLEVEL.as_str();
+            let feed_cats: std::collections::HashSet<&str> = feed_mappings
+                .iter()
+                .map(|m| m.category_id.as_str())
+                .collect();
+            let parent_cats: std::collections::HashSet<&str> = category_mappings
+                .iter()
+                .map(|m| m.parent_id.as_str())
+                .collect();
+            let empty: Vec<news_flash::models::Category> = categories
+                .into_iter()
+                .filter(|c| c.category_id.as_str() != toplevel)
+                .filter(|c| {
+                    !feed_cats.contains(c.category_id.as_str())
+                        && !parent_cats.contains(c.category_id.as_str())
+                })
+                .collect();
+            if empty.is_empty() {
+                break;
+            }
+            for category in &empty {
+                self.nf
+                    .remove_category(
+                        &CategoryID::new(category.category_id.as_str()),
+                        false,
+                        &self.client,
+                    )
+                    .await?;
+                deleted.push(category.label.clone());
+            }
+        }
+        Ok(deleted)
     }
 
     pub async fn move_category(&self, id: &str, parent_id: &str) -> anyhow::Result<()> {
@@ -781,6 +843,57 @@ pub mod tests {
 
         let detail = engine.get_article_detail(&headlines[0].id).await.unwrap();
         assert_eq!(detail.title.as_deref(), Some("Article Beta"));
+        server.stop();
+    }
+
+    #[tokio::test]
+    async fn get_feeds_prefers_real_category_and_move_cleans_up_stale_mapping() {
+        let server = crate::engine::tests::FeedServer::start(RSS.to_string(), 8);
+        let dir = tmp_dir();
+        let config = Config {
+            data_dir: dir.clone(),
+            host: "127.0.0.1".into(),
+            port: 0,
+            allow_private_proxy: false,
+        };
+        let engine = Engine::new(&config).await.unwrap();
+        let cat = engine.add_category("Cat", None).await.unwrap();
+        let cat2 = engine.add_category("Cat2", None).await.unwrap();
+        let feed = engine
+            .add_feed(&server.url, Some("Test".into()), Some(cat.clone()))
+            .await
+            .unwrap();
+        let feed_id = feed.id;
+
+        // Simulate a stale toplevel/Uncategorized mapping left behind by an older import
+        // so the feed is in both its category and Uncategorized.
+        let db_path = dir.join("engine/data/database.sqlite");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            "INSERT INTO feed_mapping (feed_id, category_id, sort_index) VALUES (?1, ?2, ?3)",
+            rusqlite::params![&feed_id, "NewsFlash.Toplevel", i32::MAX],
+        )
+        .unwrap();
+
+        let feeds = engine.get_feeds().await.unwrap();
+        let f = feeds.iter().find(|f| f.id == feed_id).unwrap();
+        assert_eq!(
+            f.category_id, cat,
+            "a feed with a real category must not be reported as Uncategorized"
+        );
+
+        // move_feed must set a single category, dropping the stale toplevel row too.
+        engine.move_feed(&feed_id, &cat2).await.unwrap();
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        let rows: Vec<(String, String)> = conn
+            .prepare("SELECT feed_id, category_id FROM feed_mapping WHERE feed_id = ?1")
+            .unwrap()
+            .query_map(rusqlite::params![&feed_id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(rows.len(), 1, "feed ends up in exactly one category");
+        assert_eq!(rows[0].1, cat2);
         server.stop();
     }
 }

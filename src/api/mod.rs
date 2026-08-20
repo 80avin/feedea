@@ -63,6 +63,10 @@ pub fn router(state: AppState) -> Router {
             patch(categories::update).delete(categories::remove),
         )
         .route("/api/categories/{id}/read", post(categories::mark_read))
+        .route(
+            "/api/categories/delete-empty",
+            post(categories::delete_empty),
+        )
         .route("/api/favicon/{feed_id}", get(articles::favicon))
         .route("/api/thumbnail/{article_id}", get(articles::thumbnail))
         .route("/api/sources", get(sources::list).post(sources::add))

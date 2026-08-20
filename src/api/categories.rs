@@ -103,6 +103,11 @@ pub async fn remove(
     Ok(Json(json!({ "ok": true })))
 }
 
+pub async fn delete_empty(State(state): State<AppState>) -> ApiResult<Json<Value>> {
+    let deleted = state.engine.delete_empty_categories().await?;
+    Ok(Json(json!({ "deleted": deleted })))
+}
+
 pub async fn mark_read(
     State(state): State<AppState>,
     Path(id): Path<String>,

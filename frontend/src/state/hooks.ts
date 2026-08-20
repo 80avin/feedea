@@ -287,6 +287,18 @@ export function useDeleteCategory() {
   });
 }
 
+export function useDeleteEmptyCategories() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ deleted: string[] }>("/api/categories/delete-empty"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["overview"] });
+      queryClient.invalidateQueries({ queryKey: ["articles"] });
+    },
+  });
+}
+
 export function useRenameCategory() {
   const queryClient = useQueryClient();
   return useMutation({
