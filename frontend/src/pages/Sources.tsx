@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { Button } from "@heroui/react";
-import { ExclamationTriangleIcon, PlusIcon, ServerStackIcon } from "@heroicons/react/24/outline";
+import { Badge, Button, Popover } from "@heroui/react";
+import {
+  ExclamationTriangleIcon,
+  PlusIcon,
+  ServerStackIcon,
+} from "@heroicons/react/24/outline";
 import { encodeId } from "../api/client";
 import type { FeedSummary } from "../api/types";
 import { useSources } from "../state/hooks";
@@ -23,11 +27,27 @@ function SourceRow({ feed }: { feed: FeedSummary }) {
         {feed.title}
       </Link>
       {feed.error_message && (
-        <ExclamationTriangleIcon
-          className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400"
-          title={feed.error_message}
-          aria-label="This source has errors"
-        />
+        <Popover>
+          <Button variant="ghost">
+            <Badge.Anchor>
+              <ExclamationTriangleIcon
+                className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400"
+                title={feed.error_message}
+                aria-label="This source has errors"
+              />
+              <Badge size="sm">{feed.error_count}</Badge>
+            </Badge.Anchor>
+          </Button>
+          <Popover.Content>
+            <Popover.Dialog>
+              <Popover.Heading>
+                {feed.error_count > 1 && feed.error_count} Error
+                {feed.error_count > 1 && "s"}
+              </Popover.Heading>
+              <p className="">{feed.error_message}</p>
+            </Popover.Dialog>
+          </Popover.Content>
+        </Popover>
       )}
       {feed.unread_count > 0 && (
         <span className="shrink-0 rounded bg-app-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-app-text-2">
@@ -74,7 +94,11 @@ export default function Sources() {
         {data && totalFeeds === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <p className="text-sm text-app-text-muted">No sources yet.</p>
-            <Button size="sm" variant="primary" onPress={() => setAddOpen(true)}>
+            <Button
+              size="sm"
+              variant="primary"
+              onPress={() => setAddOpen(true)}
+            >
               Add your first source
             </Button>
           </div>
@@ -88,7 +112,9 @@ export default function Sources() {
               </h3>
               <ul className="flex flex-col gap-0.5">
                 {[...group.feeds]
-                  .sort((x, y) => x.title.toLowerCase().localeCompare(y.title.toLowerCase()))
+                  .sort((x, y) =>
+                    x.title.toLowerCase().localeCompare(y.title.toLowerCase()),
+                  )
                   .map((feed) => (
                     <SourceRow key={feed.id} feed={feed} />
                   ))}
