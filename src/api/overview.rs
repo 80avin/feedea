@@ -7,6 +7,8 @@ use crate::api::error::ApiResult;
 use crate::dto::CategoryCard;
 use news_flash::models::{ArticleFilter, ArticleOrder, CategoryID, OrderBy};
 
+const MAX_OVERVIEW_ITEMS: i64 = 6;
+
 pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
     let (categories, category_mappings) = state.engine.get_categories().await?;
     let path_by_id = crate::engine::opml_import::category_paths(&categories, &category_mappings);
@@ -64,7 +66,7 @@ async fn build_card(
     let filter = ArticleFilter {
         order: Some(ArticleOrder::NewestFirst),
         order_by: Some(OrderBy::Published),
-        limit: Some(10),
+        limit: Some(MAX_OVERVIEW_ITEMS),
         categories: Some(vec![category_id.clone()]),
         ..ArticleFilter::default()
     };
