@@ -5,6 +5,7 @@ use news_flash::NewsFlash;
 use news_flash::error::NewsFlashError;
 use news_flash::feed_api::FeedHeaderMap;
 use news_flash::models::{ArticleFilter, CategoryID, FeedID, Marked, PluginID, Read, Url};
+use crate::engine::category_index::{CategoryIndex, IndexInputs, TOPLEVEL};
 
 pub struct Discovered {
     pub title: Option<String>,
@@ -15,6 +16,7 @@ pub struct Discovered {
 use crate::config::Config;
 use crate::dto::{ArticleDetail, FeedSummary, Headline};
 
+pub mod category_index;
 pub mod content;
 pub mod opml_import;
 pub mod queries;
@@ -256,13 +258,21 @@ impl Engine {
     pub async fn get_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
         let unread = self.with_nf(|nf| nf.unread_count_feed_map(false)).await?;
         let (feeds, mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
+        Ok(Self::summaries_from_parts(feeds, mappings, &unread))
+    }
+
+    pub fn summaries_from_parts(
+        feeds: Vec<news_flash::models::Feed>,
+        feed_mappings: Vec<news_flash::models::FeedMapping>,
+        unread: &HashMap<news_flash::models::FeedID, i64>,
+    ) -> Vec<FeedSummary> {
         // A feed can have several mappings (news-flash supports multi-category, and a
         // stale toplevel/Uncategorized row can linger after a move). The app treats a
         // feed as single-category, so pick a real category over the toplevel, and do so
         // deterministically.
         let toplevel = "NewsFlash.Toplevel";
         let mut category_by_feed: HashMap<String, String> = HashMap::new();
-        let mut mappings: Vec<_> = mappings.into_iter().collect();
+        let mut mappings: Vec<_> = feed_mappings.into_iter().collect();
         mappings.sort_by(|a, b| {
             let ak = (
                 a.category_id.as_str() == toplevel,
@@ -299,7 +309,40 @@ impl Engine {
                 error_message: feed.error_message,
             });
         }
-        Ok(out)
+        out
+    }
+
+    pub async fn category_index(&self) -> anyhow::Result<CategoryIndex> {
+        let (categories, category_mappings) = self.with_nf(|nf| nf.get_categories()).await?;
+        let (feeds, feed_mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
+        let unread = self.with_nf(|nf| nf.unread_count_feed_map(false)).await?;
+        let path_by_id =
+            crate::engine::opml_import::category_paths(&categories, &category_mappings);
+        let summaries = Self::summaries_from_parts(feeds.clone(), feed_mappings.clone(), &unread);
+        Ok(CategoryIndex::build(IndexInputs {
+            categories: categories
+                .into_iter()
+                .map(|c| (c.category_id.as_str().to_string(), c.label))
+                .collect(),
+            category_mappings: category_mappings
+                .into_iter()
+                .map(|m| (m.parent_id.as_str().to_string(), m.category_id.as_str().to_string()))
+                .collect(),
+            feed_mappings: feed_mappings
+                .into_iter()
+                .map(|m| (m.feed_id.as_str().to_string(), m.category_id.as_str().to_string()))
+                .collect(),
+            feed_titles: feeds
+                .into_iter()
+                .map(|f| (f.feed_id.as_str().to_string(), f.label))
+                .collect(),
+            unread_by_feed: unread
+                .into_iter()
+                .map(|(id, n)| (id.as_str().to_string(), n))
+                .collect(),
+            path_by_id,
+            feed_summaries: summaries,
+        }))
     }
 
     pub async fn get_categories(
@@ -314,41 +357,7 @@ impl Engine {
     pub async fn category_unread_map(
         &self,
     ) -> anyhow::Result<std::collections::HashMap<String, i64>> {
-        let unread = self.with_nf(|nf| nf.unread_count_feed_map(false)).await?;
-        let (_, mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
-        let (categories, category_mappings) = self.get_categories().await?;
-        let mut children: HashMap<String, Vec<String>> = HashMap::new();
-        for cm in &category_mappings {
-            children
-                .entry(cm.parent_id.as_str().to_string())
-                .or_default()
-                .push(cm.category_id.as_str().to_string());
-        }
-        let mut direct: HashMap<String, i64> = HashMap::new();
-        for m in &mappings {
-            let count = unread.get(&m.feed_id).copied().unwrap_or(0);
-            *direct
-                .entry(m.category_id.as_str().to_string())
-                .or_insert(0) += count;
-        }
-        let mut cat_ids: Vec<String> = direct.keys().cloned().collect();
-        for c in &categories {
-            cat_ids.push(c.category_id.as_str().to_string());
-        }
-        cat_ids.push(news_flash::models::NEWSFLASH_TOPLEVEL.as_str().to_string());
-        let mut out: HashMap<String, i64> = HashMap::new();
-        let mut seen = std::collections::HashSet::new();
-        for cat in cat_ids {
-            if !seen.insert(cat.clone()) {
-                continue;
-            }
-            let total = crate::engine::queries::descendant_category_ids(&cat, &children)
-                .iter()
-                .filter_map(|id| direct.get(id))
-                .sum();
-            out.insert(cat, total);
-        }
-        Ok(out)
+        Ok(self.category_index().await?.unread_rolled_up)
     }
 
     pub async fn add_category(&self, name: &str, parent: Option<&str>) -> anyhow::Result<String> {
@@ -455,83 +464,68 @@ impl Engine {
     }
 
     pub async fn get_category_tree(&self) -> anyhow::Result<Vec<crate::dto::CategoryNode>> {
-        let (categories, mappings) = self.get_categories().await?;
-        let unread = self.category_unread_map().await?;
-        let mut children_by_parent: HashMap<String, Vec<news_flash::models::CategoryID>> =
-            HashMap::new();
-        for mapping in mappings {
-            children_by_parent
-                .entry(mapping.parent_id.as_str().to_string())
-                .or_default()
-                .push(mapping.category_id);
-        }
-        let name_by_id: HashMap<String, String> = categories
-            .into_iter()
-            .map(|c| (c.category_id.as_str().to_string(), c.label))
-            .collect();
+        let index = self.category_index().await?;
+        Ok(Self::tree_from_index(&index))
+    }
 
-        fn build(
-            parent_id: &str,
-            children_by_parent: &HashMap<String, Vec<news_flash::models::CategoryID>>,
-            name_by_id: &HashMap<String, String>,
-            unread: &HashMap<String, i64>,
-            depth: usize,
-        ) -> Vec<crate::dto::CategoryNode> {
+    pub fn tree_from_index(index: &CategoryIndex) -> Vec<crate::dto::CategoryNode> {
+        fn build(parent_id: &str, index: &CategoryIndex, depth: usize) -> Vec<crate::dto::CategoryNode> {
             if depth >= 100 {
                 return Vec::new();
             }
             let mut nodes = Vec::new();
-            if let Some(children) = children_by_parent.get(parent_id) {
+            if let Some(children) = index.children_by_parent.get(parent_id) {
                 for child in children {
-                    let id = child.as_str().to_string();
+                    let id = child.clone();
                     nodes.push(crate::dto::CategoryNode {
                         category_id: id.clone(),
-                        name: name_by_id.get(&id).cloned().unwrap_or_default(),
+                        name: index.name_by_id.get(&id).cloned().unwrap_or_default(),
                         parent_id: parent_id.to_string(),
-                        unread_count: unread.get(&id).copied().unwrap_or(0),
-                        children: build(&id, children_by_parent, name_by_id, unread, depth + 1),
+                        unread_count: index.unread_rolled_up.get(&id).copied().unwrap_or(0),
+                        children: build(&id, index, depth + 1),
                     });
                 }
             }
             nodes
         }
-
-        Ok(build(
-            news_flash::models::NEWSFLASH_TOPLEVEL.as_str(),
-            &children_by_parent,
-            &name_by_id,
-            &unread,
-            0,
-        ))
+        build(TOPLEVEL, index, 0)
     }
 
     pub async fn get_headlines(&self, filter: ArticleFilter) -> anyhow::Result<Vec<Headline>> {
-        let articles = self.with_nf(|nf| nf.get_fat_articles(filter)).await?;
-        let feed_titles: HashMap<String, String> = self
-            .get_feeds()
-            .await?
+        let (articles, titles) = self
+            .with_nf(|nf| Ok((nf.get_fat_articles(filter)?, nf.get_feeds()?.0)))
+            .await?;
+        let title_by_feed: HashMap<String, String> = titles
             .into_iter()
-            .map(|f| (f.id, f.title))
+            .map(|f| (f.feed_id.as_str().to_string(), f.label))
             .collect();
-        let mut out = Vec::with_capacity(articles.len());
-        for a in articles {
-            let feed_id = a.feed_id.as_str().to_string();
-            out.push(Headline {
-                id: a.article_id.as_str().to_string(),
-                title: a.title,
-                feed_id: feed_id.clone(),
-                feed_title: feed_titles.get(&feed_id).cloned(),
-                url: a.url.map(|u| u.to_string()),
-                date: a.date,
-                summary: a.summary,
-                thumbnail_url: a.thumbnail_url,
-                unread: a.unread == Read::Unread,
-                marked: a.marked == Marked::Marked,
-                note: None,
-                tags: None,
-            });
-        }
-        Ok(out)
+        Ok(Self::headlines_from_articles(articles, &title_by_feed))
+    }
+
+    pub fn headlines_from_articles(
+        articles: Vec<news_flash::models::FatArticle>,
+        title_by_feed: &HashMap<String, String>,
+    ) -> Vec<Headline> {
+        articles
+            .into_iter()
+            .map(|a| {
+                let feed_id = a.feed_id.as_str().to_string();
+                Headline {
+                    id: a.article_id.as_str().to_string(),
+                    title: a.title,
+                    feed_id: feed_id.clone(),
+                    feed_title: title_by_feed.get(&feed_id).cloned(),
+                    url: a.url.map(|u| u.to_string()),
+                    date: a.date,
+                    summary: a.summary,
+                    thumbnail_url: a.thumbnail_url,
+                    unread: a.unread == Read::Unread,
+                    marked: a.marked == Marked::Marked,
+                    note: None,
+                    tags: None,
+                }
+            })
+            .collect()
     }
 
     pub async fn get_headlines_by_ids(&self, ids: Vec<String>) -> anyhow::Result<Vec<Headline>> {

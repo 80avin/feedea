@@ -73,20 +73,7 @@ pub fn search(db_path: &Path, query: &str, limit: i64) -> anyhow::Result<Vec<Sea
 
 pub fn category_totals(db_path: &Path) -> anyhow::Result<Vec<CategoryTotals>> {
     let conn = open_readonly(db_path)?;
-    let mut stmt = conn.prepare(
-        "SELECT fm.category_id,
-                COUNT(a.article_id) AS total,
-                SUM(CASE WHEN a.unread = 1 THEN 1 ELSE 0 END) AS unread
-         FROM feed_mapping fm
-         LEFT JOIN articles a ON a.feed_id = fm.feed_id
-         GROUP BY fm.category_id",
-    )?;
-    let direct: HashMap<String, (i64, i64)> = stmt
-        .query_map([], |row| {
-            let unread: Option<i64> = row.get(2)?;
-            Ok((row.get::<_, String>(0)?, (row.get(1)?, unread.unwrap_or(0))))
-        })?
-        .collect::<rusqlite::Result<_>>()?;
+    let direct = direct_totals(&conn)?;
 
     let mut children: HashMap<String, Vec<String>> = HashMap::new();
     let mut cm_stmt = conn.prepare("SELECT parent_id, category_id FROM category_mapping")?;
@@ -126,6 +113,29 @@ pub fn category_totals(db_path: &Path) -> anyhow::Result<Vec<CategoryTotals>> {
         });
     }
     Ok(out)
+}
+
+fn direct_totals(conn: &Connection) -> anyhow::Result<HashMap<String, (i64, i64)>> {
+    let mut stmt = conn.prepare(
+        "SELECT fm.category_id,
+                COUNT(a.article_id) AS total,
+                SUM(CASE WHEN a.unread = 1 THEN 1 ELSE 0 END) AS unread
+         FROM feed_mapping fm
+         LEFT JOIN articles a ON a.feed_id = fm.feed_id
+         GROUP BY fm.category_id",
+    )?;
+    let direct = stmt
+        .query_map([], |row| {
+            let unread: Option<i64> = row.get(2)?;
+            Ok((row.get::<_, String>(0)?, (row.get(1)?, unread.unwrap_or(0))))
+        })?
+        .collect::<rusqlite::Result<HashMap<_, _>>>()?;
+    Ok(direct)
+}
+
+pub fn direct_category_totals_map(db_path: &Path) -> anyhow::Result<HashMap<String, (i64, i64)>> {
+    let conn = open_readonly(db_path)?;
+    direct_totals(&conn)
 }
 
 pub fn total_article_count(db_path: &Path) -> anyhow::Result<i64> {
@@ -194,6 +204,9 @@ mod tests {
                 .any(|t| t.category_id == "NewsFlash.Toplevel" && t.total >= 2 && t.unread >= 2)
         );
         assert!(total_article_count(&db_path).unwrap() >= 2);
+        let direct = direct_category_totals_map(&db_path).unwrap();
+        let tl = direct.get("NewsFlash.Toplevel").expect("toplevel direct totals");
+        assert!(tl.0 >= 2, "toplevel direct total should count the uncategorized feed's articles");
         server.stop();
     }
 }
