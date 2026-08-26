@@ -302,11 +302,14 @@ pub async fn import_opml(
                             // (it would deadlock if held across remove_feed, which takes the same lock)
                             {
                                 let _guard = state.engine.mutation_guard().await;
-                                migrated += opml_import::migrate_feed_articles(
-                                    &db_path,
-                                    &matched.id,
-                                    &conflict.opml.url,
-                                )?;
+                                let from = matched.id.clone();
+                                let to = conflict.opml.url.clone();
+                                let db_path = db_path.clone();
+                                migrated += tokio::task::spawn_blocking(move || {
+                                    opml_import::migrate_feed_articles(&db_path, &from, &to)
+                                })
+                                .await
+                                .map_err(anyhow::Error::from)??;
                             }
                             state.engine.remove_feed(&matched.id).await?;
                             removed.insert(matched.id.clone());

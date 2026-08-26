@@ -346,6 +346,10 @@ pub struct Resolution {
     pub keep_existing_feed_id: Option<String>,
 }
 
+/// DELIBERATE PINNED-SCHEMA BYPASS: rewrites `articles.feed_id` directly because
+/// news-flash offers no public API to re-point articles between feeds. Pins
+/// upstream's private schema; an upstream migration may break it. No upstream
+/// change is planned; keep the table/column names in sync with news-flash 3.2.0.
 pub fn migrate_feed_articles(
     db_path: &std::path::Path,
     from_feed_id: &str,

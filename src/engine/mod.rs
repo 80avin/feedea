@@ -207,17 +207,27 @@ impl Engine {
         // toplevel/Uncategorized row (or a second category) can linger and make a feed
         // show up in Uncategorized too. The app treats a feed as single-category, so set
         // it to exactly one category: drop every existing mapping and insert the target.
+        // DELIBERATE PINNED-SCHEMA BYPASS: this writes feed_mapping directly because
+        // news-flash exposes no public API to delete a single feed mapping. It pins
+        // upstream's private schema; an upstream migration may break it. No upstream
+        // change is planned; keep the column names in sync with news-flash 3.2.0.
         let db_path = self.data_dir.join("engine/data/database.sqlite");
-        let conn = rusqlite::Connection::open(&db_path)?;
-        conn.busy_timeout(std::time::Duration::from_secs(10))?;
-        conn.execute(
-            "DELETE FROM feed_mapping WHERE feed_id = ?1",
-            rusqlite::params![id],
-        )?;
-        conn.execute(
-            "INSERT INTO feed_mapping (feed_id, category_id, sort_index) VALUES (?1, ?2, ?3)",
-            rusqlite::params![id, to_category, i32::MAX],
-        )?;
+        let id = id.to_string();
+        let to_category = to_category.to_string();
+        tokio::task::spawn_blocking(move || {
+            let conn = rusqlite::Connection::open(&db_path)?;
+            conn.busy_timeout(std::time::Duration::from_secs(10))?;
+            conn.execute(
+                "DELETE FROM feed_mapping WHERE feed_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute(
+                "INSERT INTO feed_mapping (feed_id, category_id, sort_index) VALUES (?1, ?2, ?3)",
+                rusqlite::params![id, to_category, i32::MAX],
+            )?;
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
         Ok(())
     }
 
@@ -408,8 +418,8 @@ impl Engine {
         let _guard = self.mutation_guard().await;
         let mut deleted: Vec<String> = Vec::new();
         loop {
-            let (categories, category_mappings) = self.nf.get_categories()?;
-            let (_, feed_mappings) = self.nf.get_feeds()?;
+            let (categories, category_mappings) = self.with_nf(|nf| nf.get_categories()).await?;
+            let (_, feed_mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
             let toplevel = NEWSFLASH_TOPLEVEL.as_str();
             let feed_cats: std::collections::HashSet<&str> = feed_mappings
                 .iter()
@@ -565,7 +575,11 @@ impl Engine {
 
     pub async fn search(&self, q: &str, limit: i64) -> anyhow::Result<Vec<Headline>> {
         let db_path = self.data_dir().join("engine/data/database.sqlite");
-        let hits = crate::engine::queries::search(&db_path, q, limit)?;
+        let q = q.to_string();
+        let hits = tokio::task::spawn_blocking(move || {
+            crate::engine::queries::search(&db_path, &q, limit)
+        })
+        .await??;
         let ids = hits.into_iter().map(|h| h.article_id).collect();
         self.get_headlines_by_ids(ids).await
     }
