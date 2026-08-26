@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::engine::category_index::{CategoryIndex, IndexInputs, TOPLEVEL};
 use news_flash::NewsFlash;
 use news_flash::error::NewsFlashError;
 use news_flash::feed_api::FeedHeaderMap;
 use news_flash::models::{ArticleFilter, CategoryID, FeedID, Marked, PluginID, Read, Url};
-use crate::engine::category_index::{CategoryIndex, IndexInputs, TOPLEVEL};
 
 pub struct Discovered {
     pub title: Option<String>,
@@ -326,11 +326,21 @@ impl Engine {
                 .collect(),
             category_mappings: category_mappings
                 .into_iter()
-                .map(|m| (m.parent_id.as_str().to_string(), m.category_id.as_str().to_string()))
+                .map(|m| {
+                    (
+                        m.parent_id.as_str().to_string(),
+                        m.category_id.as_str().to_string(),
+                    )
+                })
                 .collect(),
             feed_mappings: feed_mappings
                 .into_iter()
-                .map(|m| (m.feed_id.as_str().to_string(), m.category_id.as_str().to_string()))
+                .map(|m| {
+                    (
+                        m.feed_id.as_str().to_string(),
+                        m.category_id.as_str().to_string(),
+                    )
+                })
                 .collect(),
             feed_titles: feeds
                 .into_iter()
@@ -447,9 +457,13 @@ impl Engine {
 
     pub async fn mark_category_read(&self, id: &str) -> anyhow::Result<()> {
         let _guard = self.mutation_guard().await;
-        self.nf
-            .set_category_read(&[news_flash::models::CategoryID::new(id)], &self.client)
-            .await?;
+        let index = self.category_index().await?;
+        let ids: Vec<news_flash::models::CategoryID> =
+            crate::engine::queries::descendant_category_ids(id, &index.children_by_parent)
+                .into_iter()
+                .map(|s| news_flash::models::CategoryID::new(&s))
+                .collect();
+        self.nf.set_category_read(&ids, &self.client).await?;
         Ok(())
     }
 
@@ -469,7 +483,11 @@ impl Engine {
     }
 
     pub fn tree_from_index(index: &CategoryIndex) -> Vec<crate::dto::CategoryNode> {
-        fn build(parent_id: &str, index: &CategoryIndex, depth: usize) -> Vec<crate::dto::CategoryNode> {
+        fn build(
+            parent_id: &str,
+            index: &CategoryIndex,
+            depth: usize,
+        ) -> Vec<crate::dto::CategoryNode> {
             if depth >= 100 {
                 return Vec::new();
             }

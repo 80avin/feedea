@@ -470,3 +470,103 @@ async fn delete_category_with_remove_children_prunes_saved_articles() {
         .unwrap();
     assert_eq!(saved_count, 0, "app-db saved row must be gone after prune");
 }
+
+#[tokio::test]
+async fn mark_parent_category_read_clears_descendant_articles() {
+    let (feed_url, app, _server, _db, _dir) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+
+    let parent_id = serde_json::from_slice::<serde_json::Value>(
+        &post_category(&app, &cookie, r#"{"name":"Parent"}"#)
+            .await
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes(),
+    )
+    .unwrap()["category_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let child_id = serde_json::from_slice::<serde_json::Value>(
+        &post_category(
+            &app,
+            &cookie,
+            &format!(r#"{{"name":"Child","parent_id":"{parent_id}"}}"#),
+        )
+        .await
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes(),
+    )
+    .unwrap()["category_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let add_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(format!(
+                    r#"{{"url":"{feed_url}","title":"Child Feed","category_id":"{child_id}"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(add_resp.status(), StatusCode::OK);
+
+    let refresh_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources/refresh-all")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(refresh_resp.status(), StatusCode::OK);
+
+    let tree = get_tree(&app, &cookie).await;
+    let categories = tree["categories"].as_array().unwrap();
+    let child = find_node(categories, &child_id).expect("child should be in tree");
+    assert_eq!(
+        child["unread_count"].as_i64().unwrap(),
+        2,
+        "two unread articles before marking parent read"
+    );
+
+    let read_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/categories/{parent_id}/read"))
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(read_resp.status(), StatusCode::OK);
+
+    let tree = get_tree(&app, &cookie).await;
+    let categories = tree["categories"].as_array().unwrap();
+    let child = find_node(categories, &child_id).expect("child should still be in tree");
+    assert_eq!(
+        child["unread_count"].as_i64().unwrap(),
+        0,
+        "marking the parent read must clear descendant articles"
+    );
+}

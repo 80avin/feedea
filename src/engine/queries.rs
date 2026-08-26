@@ -205,8 +205,13 @@ mod tests {
         );
         assert!(total_article_count(&db_path).unwrap() >= 2);
         let direct = direct_category_totals_map(&db_path).unwrap();
-        let tl = direct.get("NewsFlash.Toplevel").expect("toplevel direct totals");
-        assert!(tl.0 >= 2, "toplevel direct total should count the uncategorized feed's articles");
+        let tl = direct
+            .get("NewsFlash.Toplevel")
+            .expect("toplevel direct totals");
+        assert!(
+            tl.0 >= 2,
+            "toplevel direct total should count the uncategorized feed's articles"
+        );
         server.stop();
     }
 }

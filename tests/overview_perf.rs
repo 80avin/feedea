@@ -74,7 +74,11 @@ impl PerfServer {
                 }
             }
         });
-        PerfServer { addr, stop, handle: Some(handle) }
+        PerfServer {
+            addr,
+            stop,
+            handle: Some(handle),
+        }
     }
 }
 
@@ -198,12 +202,18 @@ async fn overview_latency_benchmark() {
                     .uri("/api/sources")
                     .header("content-type", "application/json")
                     .header("cookie", &cookie)
-                    .body(Body::from(format!(r#"{{"url":"{url}","title":"Uncat {i}"}}"#)))
+                    .body(Body::from(format!(
+                        r#"{{"url":"{url}","title":"Uncat {i}"}}"#
+                    )))
                     .unwrap(),
             )
             .await
             .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK, "add uncategorized feed {i} failed");
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "add uncategorized feed {i} failed"
+        );
     }
 
     let mut cards = 0usize;
@@ -234,7 +244,10 @@ async fn overview_latency_benchmark() {
             samples.push(elapsed);
         }
     }
-    assert!(cards >= N_CATS, "expected at least {N_CATS} cards, got {cards}");
+    assert!(
+        cards >= N_CATS,
+        "expected at least {N_CATS} cards, got {cards}"
+    );
     samples.sort_by(|a, b| a.total_cmp(b));
     let n = samples.len();
     let median = samples[n / 2];

@@ -164,8 +164,12 @@ mod tests {
                 ("f2".into(), "leaf".into()),
             ],
             feed_titles: vec![("f1".into(), "Feed One".into())],
-            unread_by_feed: [("f1".into(), 3i64), ("f2".into(), 5i64)].into_iter().collect(),
-            path_by_id: [("root".into(), vec!["Root".to_string()])].into_iter().collect(),
+            unread_by_feed: [("f1".into(), 3i64), ("f2".into(), 5i64)]
+                .into_iter()
+                .collect(),
+            path_by_id: [("root".into(), vec!["Root".to_string()])]
+                .into_iter()
+                .collect(),
             feed_summaries: vec![],
         }
     }
@@ -183,7 +187,10 @@ mod tests {
     #[test]
     fn card_ids_preserve_order_and_exclude_containers() {
         let idx = CategoryIndex::build(inputs());
-        assert_eq!(idx.card_ids(), vec!["leaf".to_string(), TOPLEVEL.to_string()]);
+        assert_eq!(
+            idx.card_ids(),
+            vec!["leaf".to_string(), TOPLEVEL.to_string()]
+        );
     }
 
     #[test]
