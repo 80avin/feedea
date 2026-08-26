@@ -62,15 +62,23 @@ predicate template in `delete_empty_categories`
 
 Every card — including Toplevel — shows only its own direct feeds' data:
 
-- **items**: batched fetch bucketed by feed→direct-category (see 3).
-- **total_count / unread_count**: the *direct* (non-rolled-up) layer of
-  `category_totals` / unread aggregation.
+- **items**: per-card parallel fetch of the card's own newest articles via the
+  card's resolved feeds (see 3).
+- **total_count / unread_count**: per-feed article totals
+  (`queries::per_feed_totals_map`) summed over the card's *resolved* feeds —
+  the same feed→card assignment used for items, so counts and items can never
+  diverge (a feed with a stale duplicate mapping counts in exactly one card).
 
 Rationale: today the Toplevel card effectively duplicates "All articles"
 (`ArticleFilter{categories:[toplevel]}` recursively expands into every
-top-level category; `category_totals` rolls up Toplevel across all
-descendants). Rolled-up counts remain used where they belong: the sidebar /
-category tree (`CategoryNode.unread_count`).
+top-level category; a rolled-up toplevel count equals the global total).
+Rolled-up counts remain used where they belong: the sidebar / category tree
+(`CategoryNode.unread_count`).
+
+NOTE (2026-08-26): the original "single batched query with a global window"
+was rejected after end-to-end verification on a real database (it starved
+categories whose articles fell outside the global newest-N window). Per-card
+parallel fetch replaced it. See the plan's Task 4 for the final approach.
 
 ### 3. Batched headline fetch
 

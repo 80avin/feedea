@@ -850,7 +850,7 @@ git commit -m "feat(engine): add CategoryIndex snapshot and dedupe category read
 
 ---
 
-### Task 4: Rewrite `/api/overview` (card rule + batched headlines)
+### Task 4: Rewrite `/api/overview` (card rule + per-card parallel headlines — REVISED: batching rejected after real-data verification, see §3)
 
 **Files:**
 - Modify: `src/api/overview.rs`
@@ -1240,7 +1240,7 @@ Expected: FAIL — child `unread_count` is still `2` after marking parent read.
             &index.children_by_parent,
         )
         .into_iter()
-        .map(news_flash::models::CategoryID::new)
+        .map(|s| news_flash::models::CategoryID::new(&s))
         .collect();
         self.nf.set_category_read(&ids, &self.client).await?;
         Ok(())
@@ -1664,7 +1664,7 @@ Fill the `## After` row of `docs/superpowers/plans/2026-08-25-overview-perf-resu
 - `/api/overview` dropped from ~6N+12 sequential SQLite statements (per-card
   headline fetch + per-card mapping re-reads) to ~11 total regardless of N:
   CategoryIndex (categories + feeds + unread map) + 1 direct-totals query +
-  1 batched fat-articles query + 1 global count.
+  per-card parallel fetches (one query per card, concurrent) + 1 global count.
 - Median latency change: <baseline median>ms -> <after median>ms on the fixture
   above (24 categorized + 4 uncategorized feeds, ~1120 articles).
 ```
