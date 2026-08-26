@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::Json;
 use axum::extract::State;
 use serde_json::{Value, json};
@@ -5,84 +7,88 @@ use serde_json::{Value, json};
 use crate::AppState;
 use crate::api::error::ApiResult;
 use crate::dto::CategoryCard;
-use news_flash::models::{ArticleFilter, ArticleOrder, CategoryID, OrderBy};
+use news_flash::models::{ArticleFilter, ArticleOrder, FeedID, OrderBy};
 
 const MAX_OVERVIEW_ITEMS: i64 = 6;
 
 pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
-    let (categories, category_mappings) = state.engine.get_categories().await?;
-    let path_by_id = crate::engine::opml_import::category_paths(&categories, &category_mappings);
+    let index = state.engine.category_index().await?;
+
     let db_path = state.engine.data_dir().join("engine/data/database.sqlite");
-    let totals = crate::engine::queries::category_totals(&db_path)?;
-    let category_unread = state.engine.category_unread_map().await?;
+    let totals = {
+        let db_path = db_path.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::engine::queries::direct_category_totals_map(&db_path)
+        })
+        .await
+        .map_err(anyhow::Error::from)??
+    };
 
-    let mut seen = std::collections::HashSet::new();
-    let mut cards = Vec::new();
-    for cat in categories {
-        seen.insert(cat.category_id.as_str().to_string());
-        let name = path_by_id
-            .get(cat.category_id.as_str())
-            .filter(|p| !p.is_empty())
-            .map(|p| p.join(" / "))
-            .unwrap_or_else(|| cat.label.clone());
-        cards.push(build_card(&state, &cat.category_id, name, &totals, &category_unread).await?);
-    }
-    for t in &totals {
-        if seen.insert(t.category_id.clone()) {
-            let name = path_by_id
-                .get(&t.category_id)
-                .filter(|p| !p.is_empty())
-                .map(|p| p.join(" / "))
-                .unwrap_or_else(|| t.category_id.clone());
-            cards.push(
-                build_card(
-                    &state,
-                    &CategoryID::new(&t.category_id),
-                    name,
-                    &totals,
-                    &category_unread,
-                )
-                .await?,
-            );
-        }
+    let card_ids = index.card_ids();
+
+    // Group directly-mapped feeds by their resolved card category so each card
+    // can fetch ITS OWN newest articles. A single batched query with a global
+    // window starves categories whose articles fall outside it; per-card
+    // queries guarantee each card's previews.
+    let mut feed_ids_by_card: HashMap<String, Vec<FeedID>> = HashMap::new();
+    for (feed_id, category_id) in &index.cat_by_feed {
+        feed_ids_by_card
+            .entry(category_id.clone())
+            .or_default()
+            .push(FeedID::new(feed_id));
     }
 
-    let all_total = crate::engine::queries::total_article_count(&db_path)?;
+    let mut tasks = tokio::task::JoinSet::new();
+    for id in &card_ids {
+        let Some(feed_ids) = feed_ids_by_card.get(id) else {
+            continue;
+        };
+        let engine = state.engine.clone();
+        let id = id.clone();
+        let feed_ids = feed_ids.clone();
+        tasks.spawn(async move {
+            let filter = ArticleFilter {
+                order: Some(ArticleOrder::NewestFirst),
+                order_by: Some(OrderBy::Published),
+                limit: Some(MAX_OVERVIEW_ITEMS),
+                feeds: Some(feed_ids),
+                ..ArticleFilter::default()
+            };
+            let result = engine.with_nf(move |nf| nf.get_fat_articles(filter)).await;
+            (id, result)
+        });
+    }
+
+    let mut items_by_card: HashMap<String, Vec<crate::dto::Headline>> = HashMap::new();
+    while let Some(joined) = tasks.join_next().await {
+        let (id, result) = joined.map_err(anyhow::Error::from)?;
+        let articles = result?;
+        let headlines =
+            crate::engine::Engine::headlines_from_articles(articles, &index.title_by_feed);
+        items_by_card.insert(id, headlines);
+    }
+
+    let mut cards = Vec::with_capacity(card_ids.len());
+    for id in &card_ids {
+        let (total, _) = totals.get(id).copied().unwrap_or((0, 0));
+        cards.push(CategoryCard {
+            category_id: id.clone(),
+            name: index.display_name(id),
+            total_count: total,
+            unread_count: index.unread_direct.get(id).copied().unwrap_or(0),
+            items: items_by_card.remove(id).unwrap_or_default(),
+        });
+    }
+
+    let all_total = {
+        tokio::task::spawn_blocking(move || crate::engine::queries::total_article_count(&db_path))
+            .await
+            .map_err(anyhow::Error::from)??
+    };
     let all_unread = state.engine.with_nf(|nf| nf.unread_count_all()).await?;
 
     Ok(Json(json!({
         "cards": cards,
         "all": { "total_count": all_total, "unread_count": all_unread },
     })))
-}
-
-async fn build_card(
-    state: &AppState,
-    category_id: &CategoryID,
-    name: String,
-    totals: &[crate::engine::queries::CategoryTotals],
-    category_unread: &std::collections::HashMap<String, i64>,
-) -> ApiResult<CategoryCard> {
-    let filter = ArticleFilter {
-        order: Some(ArticleOrder::NewestFirst),
-        order_by: Some(OrderBy::Published),
-        limit: Some(MAX_OVERVIEW_ITEMS),
-        categories: Some(vec![category_id.clone()]),
-        ..ArticleFilter::default()
-    };
-    let items = state.engine.get_headlines(filter).await?;
-    Ok(CategoryCard {
-        category_id: category_id.as_str().to_string(),
-        name,
-        total_count: totals
-            .iter()
-            .find(|t| t.category_id == category_id.as_str())
-            .map(|t| t.total)
-            .unwrap_or(0),
-        unread_count: category_unread
-            .get(category_id.as_str())
-            .copied()
-            .unwrap_or(0),
-        items,
-    })
 }

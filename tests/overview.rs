@@ -35,6 +35,49 @@ const RSS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 </rss>
 "#;
 
+const OLD_RSS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Old Feed</title>
+    <link>http://127.0.0.1/</link>
+    <description>old</description>
+    <item>
+      <title>Old Article</title>
+      <link>http://example.com/old</link>
+      <guid isPermaLink="false">old-1</guid>
+      <pubDate>Mon, 12 Jan 2026 10:00:00 GMT</pubDate>
+      <description>Old body.</description>
+    </item>
+    <item>
+      <title>Older Article</title>
+      <link>http://example.com/older</link>
+      <guid isPermaLink="false">old-2</guid>
+      <pubDate>Sun, 11 Jan 2026 10:00:00 GMT</pubDate>
+      <description>Older body.</description>
+    </item>
+  </channel>
+</rss>
+"#;
+
+fn fresh_rss(n: usize) -> String {
+    let items: String = (0..n)
+        .map(|i| {
+            let day = 1 + (i % 27);
+            format!(
+                "<item><title>Fresh {i}</title><link>http://example.com/f/{i}</link>\
+                 <guid isPermaLink=\"false\">f-{i}</guid>\
+                 <pubDate>Mon, {day} Aug 2026 10:00:00 GMT</pubDate>\
+                 <description>Fresh body {i}.</description></item>"
+            )
+        })
+        .collect();
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel>\
+         <title>Fresh</title><link>http://127.0.0.1/</link><description>fresh</description>\
+         {items}</channel></rss>"
+    )
+}
+
 mod feed_server;
 
 async fn spawn_app() -> (String, axum::Router, feed_server::FeedServer) {
@@ -93,6 +136,89 @@ fn cookie_pair(set_cookie: &str) -> String {
     set_cookie.split(';').next().unwrap().to_string()
 }
 
+async fn create_category(app: &axum::Router, cookie: &str, body: &str) -> String {
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/categories")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, cookie)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    serde_json::from_slice::<serde_json::Value>(&body).unwrap()["category_id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+async fn add_feed(
+    app: &axum::Router,
+    cookie: &str,
+    feed_url: &str,
+    title: &str,
+    category_id: Option<&str>,
+) {
+    let category = category_id
+        .map(|c| format!(r#","category_id":"{c}""#))
+        .unwrap_or_default();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, cookie)
+                .body(Body::from(format!(
+                    r#"{{"url":"{feed_url}","title":"{title}"{category}}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+async fn refresh_all(app: &axum::Router, cookie: &str) {
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources/refresh-all")
+                .header(axum::http::header::COOKIE, cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+async fn overview(app: &axum::Router, cookie: &str) -> serde_json::Value {
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/overview")
+                .header(axum::http::header::COOKIE, cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    serde_json::from_slice(&body).unwrap()
+}
+
 #[tokio::test]
 async fn overview_requires_auth() {
     let (_feed_url, app, _server) = spawn_app().await;
@@ -110,117 +236,57 @@ async fn overview_requires_auth() {
 }
 
 #[tokio::test]
-async fn overview_parent_card_includes_descendant_feed_counts() {
+async fn overview_parent_without_direct_feeds_gets_no_card() {
     let (feed_url, app, _server) = spawn_app().await;
     let cookie = cookie_pair(&login_cookie(&app).await);
 
-    let create_resp = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/categories")
-                .header("content-type", "application/json")
-                .header(axum::http::header::COOKIE, &cookie)
-                .body(Body::from(r#"{"name":"Parent"}"#))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(create_resp.status(), StatusCode::OK);
-    let body = create_resp.into_body().collect().await.unwrap().to_bytes();
-    let parent_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["category_id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let parent_id = create_category(&app, &cookie, r#"{"name":"Parent"}"#).await;
+    let child_id = create_category(
+        &app,
+        &cookie,
+        &format!(r#"{{"name":"Child","parent_id":"{parent_id}"}}"#),
+    )
+    .await;
 
-    let create_resp = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/categories")
-                .header("content-type", "application/json")
-                .header(axum::http::header::COOKIE, &cookie)
-                .body(Body::from(format!(
-                    r#"{{"name":"Child","parent_id":"{parent_id}"}}"#
-                )))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(create_resp.status(), StatusCode::OK);
-    let body = create_resp.into_body().collect().await.unwrap().to_bytes();
-    let child_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["category_id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    add_feed(&app, &cookie, &feed_url, "Nested Feed", Some(&child_id)).await;
+    refresh_all(&app, &cookie).await;
 
-    let add_resp = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/sources")
-                .header("content-type", "application/json")
-                .header(axum::http::header::COOKIE, &cookie)
-                .body(Body::from(format!(
-                    r#"{{"url":"{feed_url}","title":"Nested Feed","category_id":"{child_id}"}}"#
-                )))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(add_resp.status(), StatusCode::OK);
-
-    let refresh_resp = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/sources/refresh-all")
-                .header(axum::http::header::COOKIE, &cookie)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(refresh_resp.status(), StatusCode::OK);
-
-    let resp = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/api/overview")
-                .header(axum::http::header::COOKIE, &cookie)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body = resp.into_body().collect().await.unwrap().to_bytes();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-
-    let cards = json["cards"].as_array().expect("cards should be an array");
-    let parent = cards
-        .iter()
-        .find(|card| card["name"] == "Parent")
-        .expect("parent card should exist");
+    let json = overview(&app, &cookie).await;
+    let cards = json["cards"].as_array().unwrap();
     assert!(
-        parent["total_count"].as_i64().unwrap() >= 1,
-        "parent total_count should reflect descendant feeds, got {parent:?}"
+        cards.iter().all(|c| c["category_id"] != parent_id),
+        "container category without direct feeds must not get a card: {cards:?}"
     );
-    assert!(
-        parent["unread_count"].as_i64().unwrap() >= 1,
-        "parent unread_count should reflect descendant feeds, got {parent:?}"
-    );
+    assert!(cards.iter().all(|c| c["name"] != "Parent"));
     let child = cards
         .iter()
         .find(|card| card["category_id"] == child_id)
         .expect("child card should exist");
     assert!(child["total_count"].as_i64().unwrap() >= 1);
     assert!(child["unread_count"].as_i64().unwrap() >= 1);
+}
+
+#[tokio::test]
+async fn overview_no_toplevel_card_without_uncategorized_feeds() {
+    let (feed_url, app, _server) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+
+    let cat_id = create_category(&app, &cookie, r#"{"name":"Cat"}"#).await;
+    add_feed(&app, &cookie, &feed_url, "Categorized", Some(&cat_id)).await;
+    refresh_all(&app, &cookie).await;
+
+    let json = overview(&app, &cookie).await;
+    let cards = json["cards"].as_array().unwrap();
+    assert!(
+        cards.iter().all(|c| c["name"] != "NewsFlash.Toplevel"),
+        "toplevel card must not appear when no feed maps directly to it"
+    );
+    let cat = cards
+        .iter()
+        .find(|c| c["category_id"] == cat_id)
+        .expect("categorized feed's card should exist");
+    assert!(cat["total_count"].as_i64().unwrap() >= 2);
+    assert!(json["all"]["total_count"].as_i64().unwrap() >= 2);
 }
 
 #[tokio::test]
@@ -378,4 +444,50 @@ async fn overview_shows_full_category_path() {
         child["name"], "Top / Sub",
         "overview card shows the full category path, not just the leaf"
     );
+}
+
+#[tokio::test]
+async fn overview_shows_items_for_categories_with_older_articles() {
+    let (_feed_url, app, _server) = spawn_app().await;
+    let fresh_srv = feed_server::FeedServer::start(fresh_rss(30), 60);
+    let old_srv = feed_server::FeedServer::start(OLD_RSS.to_string(), 60);
+    let cookie = cookie_pair(&login_cookie(&app).await);
+
+    let fresh_cat = create_category(&app, &cookie, r#"{"name":"Fresh"}"#).await;
+    let old_cat = create_category(&app, &cookie, r#"{"name":"Old"}"#).await;
+
+    add_feed(
+        &app,
+        &cookie,
+        &fresh_srv.url,
+        "Fresh Feed",
+        Some(&fresh_cat),
+    )
+    .await;
+    add_feed(&app, &cookie, &old_srv.url, "Old Feed", Some(&old_cat)).await;
+    refresh_all(&app, &cookie).await;
+
+    let json = overview(&app, &cookie).await;
+    let cards = json["cards"].as_array().unwrap();
+    let fresh = cards
+        .iter()
+        .find(|c| c["category_id"] == fresh_cat)
+        .expect("fresh card should exist");
+    let old = cards
+        .iter()
+        .find(|c| c["category_id"] == old_cat)
+        .expect("old card should exist");
+
+    assert!(
+        !fresh["items"].as_array().unwrap().is_empty(),
+        "fresh card should show items"
+    );
+    let old_items = old["items"].as_array().unwrap();
+    assert_eq!(
+        old_items.len(),
+        2,
+        "old card must show its own 2 items even though its articles are older than the fresh feed's: {old:?}"
+    );
+    assert_eq!(old_items[0]["title"], "Old Article");
+    assert_eq!(old_items[1]["title"], "Older Article");
 }
