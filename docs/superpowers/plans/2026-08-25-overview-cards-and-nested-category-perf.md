@@ -285,7 +285,7 @@ async fn overview_latency_benchmark() {
 **Step 2: Verify the harness compiles and runs on `main`**
 
 Run: `cargo test --test overview_perf -- --ignored --nocapture`
-Expected: prints `OVERVIEW_PERF cards=28 min_ms=... median_ms=... mean_ms=... samples=20`.
+Expected: prints `OVERVIEW_PERF cards=25 min_ms=... median_ms=... mean_ms=... samples=20`.
 
 **Step 3: Record the baseline**
 
@@ -298,10 +298,10 @@ Fixture: 24 categorized + 4 uncategorized feeds, 40 items each (~1120 articles).
 Command: `cargo test --test overview_perf -- --ignored --nocapture`
 
 ## Baseline (main @ <git short sha>)
-OVERVIEW_PERF cards=28 min_ms=<value> median_ms=<value> mean_ms=<value> samples=20
+OVERVIEW_PERF cards=25 min_ms=<value> median_ms=<value> mean_ms=<value> samples=20
 
 ## After (worktree branch, final task)
-OVERVIEW_PERF cards=28 min_ms=... median_ms=... mean_ms=... samples=20
+OVERVIEW_PERF cards=25 min_ms=... median_ms=... mean_ms=... samples=20
 ```
 
 Fill the Baseline row with the real numbers and the current `git rev-parse --short HEAD`.
@@ -1653,7 +1653,7 @@ Expected: PASS (cargo test + frontend typecheck/lint).
 **Step 2: Re-measure**
 
 Run: `cargo test --test overview_perf -- --ignored --nocapture`
-Expected: prints `OVERVIEW_PERF cards=28 min_ms=... median_ms=... mean_ms=... samples=20`.
+Expected: prints `OVERVIEW_PERF cards=25 min_ms=... median_ms=... mean_ms=... samples=20`.
 
 **Step 3: Record the "after" row and summary in the results doc**
 
