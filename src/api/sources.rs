@@ -39,13 +39,12 @@ pub struct ImportOpmlRequest {
 }
 
 pub async fn list(State(state): State<AppState>) -> ApiResult<Json<Value>> {
-    let feeds = state.engine.get_feeds().await?;
-    let (categories, category_mappings) = state.engine.get_categories().await?;
-    let path_by_id = opml_import::category_paths(&categories, &category_mappings);
+    let index = state.engine.category_index().await?;
     let mut groups: Vec<SourceGroup> = Vec::new();
-    for feed in feeds {
+    for feed in index.feed_summaries {
         let category_id = feed.category_id.clone();
-        let category_name = path_by_id
+        let category_name = index
+            .path_by_id
             .get(&category_id)
             .filter(|path| !path.is_empty())
             .map(|path| path.join(" / "))
@@ -230,6 +229,9 @@ pub async fn import_opml(
         state.engine.import_opml(&cleaned).await?;
     }
 
+    let (categories, category_mappings) = state.engine.get_categories().await?;
+    let mut path_by_id = opml_import::category_paths(&categories, &category_mappings);
+
     let db_path = state.engine.data_dir().join("engine/data/database.sqlite");
     let mut migrated: u64 = 0;
     let mut conflicts_resolved: usize = 0;
@@ -262,12 +264,6 @@ pub async fn import_opml(
                                 changed = true;
                             }
                             if conflict.opml.category != existing_id.category {
-                                // Re-fetch after the import: a keep-new of other entries
-                                // may have created the nested categories this entry targets.
-                                let (categories, category_mappings) =
-                                    state.engine.get_categories().await?;
-                                let mut path_by_id =
-                                    opml_import::category_paths(&categories, &category_mappings);
                                 let category_id = if conflict.opml.category.is_empty() {
                                     // The file places the feed at the root: move it out of
                                     // its current category to the toplevel.

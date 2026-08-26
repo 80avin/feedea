@@ -55,7 +55,10 @@ pub async fn update(
     Path(id): Path<String>,
     Json(req): Json<UpdateCategory>,
 ) -> ApiResult<Json<CategoryNode>> {
-    ensure_exists(&state, &id).await?;
+    let index = state.engine.category_index().await?;
+    if !index.is_known(&id) {
+        return Err(ApiError::not_found("category not found"));
+    }
     if req.name.is_none() && req.parent_id.is_none() {
         return Err(ApiError::bad_request("nothing to update"));
     }
@@ -63,10 +66,7 @@ pub async fn update(
         if parent_id == &id {
             return Err(ApiError::bad_request("cannot move a category into itself"));
         }
-        let tree = state.engine.get_category_tree().await?;
-        if let Some(node) = find_node(&tree, &id)
-            && contains_node(node, parent_id)
-        {
+        if index.descendants(&id).contains(parent_id) {
             return Err(ApiError::bad_request(
                 "cannot move a category into its own descendant",
             ));
@@ -136,11 +136,4 @@ fn find_node<'a>(nodes: &'a [CategoryNode], id: &str) -> Option<&'a CategoryNode
         }
     }
     None
-}
-
-fn contains_node(node: &CategoryNode, id: &str) -> bool {
-    if node.category_id == id {
-        return true;
-    }
-    node.children.iter().any(|child| contains_node(child, id))
 }
