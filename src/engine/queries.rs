@@ -11,12 +11,6 @@ pub struct SearchHit {
     pub thumbnail_url: Option<String>,
 }
 
-pub struct CategoryTotals {
-    pub category_id: String,
-    pub total: i64,
-    pub unread: i64,
-}
-
 pub fn open_readonly(db_path: &Path) -> anyhow::Result<Connection> {
     Ok(Connection::open_with_flags(
         db_path,
@@ -71,74 +65,26 @@ pub fn search(db_path: &Path, query: &str, limit: i64) -> anyhow::Result<Vec<Sea
     Ok(out)
 }
 
-pub fn category_totals(db_path: &Path) -> anyhow::Result<Vec<CategoryTotals>> {
+/// Per-feed article totals (total + unread) directly from the articles table,
+/// keyed by feed id. Overview card counts are derived from this over each
+/// card's RESOLVED feeds so counts and items always share the same
+/// feed->card assignment.
+pub fn per_feed_totals_map(db_path: &Path) -> anyhow::Result<HashMap<String, (i64, i64)>> {
     let conn = open_readonly(db_path)?;
-    let direct = direct_totals(&conn)?;
-
-    let mut children: HashMap<String, Vec<String>> = HashMap::new();
-    let mut cm_stmt = conn.prepare("SELECT parent_id, category_id FROM category_mapping")?;
-    for cm in cm_stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })? {
-        let (parent, child) = cm?;
-        children.entry(parent).or_default().push(child);
-    }
-
-    let toplevel = news_flash::models::NEWSFLASH_TOPLEVEL.as_str().to_string();
-    let mut cat_stmt = conn.prepare("SELECT category_id FROM categories")?;
-    let mut cats: Vec<String> = cat_stmt
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<Vec<String>>>()?;
-    cats.extend(direct.keys().cloned());
-    cats.push(toplevel.clone());
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
-    for cat in cats {
-        if !seen.insert(cat.clone()) {
-            continue;
-        }
-        let ids = descendant_category_ids(&cat, &children);
-        let mut total = 0;
-        let mut unread = 0;
-        for id in ids {
-            if let Some((t, u)) = direct.get(&id) {
-                total += t;
-                unread += u;
-            }
-        }
-        out.push(CategoryTotals {
-            category_id: cat,
-            total,
-            unread,
-        });
-    }
-    Ok(out)
-}
-
-fn direct_totals(conn: &Connection) -> anyhow::Result<HashMap<String, (i64, i64)>> {
-    // Strict-direct counts reflect ALL feed_mapping rows: a feed with a stale duplicate
-    // mapping contributes to both a real card and the toplevel card's counts, while its
-    // items still land only under the preferred category.
     let mut stmt = conn.prepare(
-        "SELECT fm.category_id,
-                COUNT(a.article_id) AS total,
-                SUM(CASE WHEN a.unread = 1 THEN 1 ELSE 0 END) AS unread
-         FROM feed_mapping fm
-         LEFT JOIN articles a ON a.feed_id = fm.feed_id
-         GROUP BY fm.category_id",
+        "SELECT feed_id,
+                COUNT(*) AS total,
+                SUM(CASE WHEN unread = 1 THEN 1 ELSE 0 END) AS unread
+         FROM articles
+         GROUP BY feed_id",
     )?;
-    let direct = stmt
+    let map = stmt
         .query_map([], |row| {
             let unread: Option<i64> = row.get(2)?;
             Ok((row.get::<_, String>(0)?, (row.get(1)?, unread.unwrap_or(0))))
         })?
         .collect::<rusqlite::Result<HashMap<_, _>>>()?;
-    Ok(direct)
-}
-
-pub fn direct_category_totals_map(db_path: &Path) -> anyhow::Result<HashMap<String, (i64, i64)>> {
-    let conn = open_readonly(db_path)?;
-    direct_totals(&conn)
+    Ok(map)
 }
 
 pub fn total_article_count(db_path: &Path) -> anyhow::Result<i64> {
@@ -200,20 +146,13 @@ mod tests {
         assert_eq!(hits[0].title.as_deref(), Some("Article Alpha"));
         let none = search(&db_path, "zzznottherezzz", 10).unwrap();
         assert!(none.is_empty());
-        let totals = category_totals(&db_path).unwrap();
-        assert!(
-            totals
-                .iter()
-                .any(|t| t.category_id == "NewsFlash.Toplevel" && t.total >= 2 && t.unread >= 2)
-        );
         assert!(total_article_count(&db_path).unwrap() >= 2);
-        let direct = direct_category_totals_map(&db_path).unwrap();
-        let tl = direct
-            .get("NewsFlash.Toplevel")
-            .expect("toplevel direct totals");
+        let per_feed = per_feed_totals_map(&db_path).unwrap();
         assert!(
-            tl.0 >= 2,
-            "toplevel direct total should count the uncategorized feed's articles"
+            per_feed
+                .values()
+                .any(|(total, unread)| *total >= 2 && *unread >= 2),
+            "per-feed totals should count the uncategorized feed's articles"
         );
         server.stop();
     }

@@ -250,7 +250,11 @@ async fn overview_latency_benchmark() {
     );
     samples.sort_by(|a, b| a.total_cmp(b));
     let n = samples.len();
-    let median = samples[n / 2];
+    let median = if n.is_multiple_of(2) {
+        (samples[n / 2 - 1] + samples[n / 2]) / 2.0
+    } else {
+        samples[n / 2]
+    };
     let min = samples[0];
     let mean: f64 = samples.iter().sum::<f64>() / n as f64;
     println!(

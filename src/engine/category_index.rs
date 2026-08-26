@@ -54,7 +54,6 @@ impl CategoryIndex {
                 .push(child.clone());
         }
 
-        let mut direct_feed_cats: HashSet<String> = HashSet::new();
         let mut sorted: Vec<&(String, String)> = feed_mappings.iter().collect();
         sorted.sort_by(|a, b| {
             let ak = (a.1 == TOPLEVEL, a.0.as_str(), a.1.as_str());
@@ -63,16 +62,19 @@ impl CategoryIndex {
         });
         let mut cat_by_feed: HashMap<String, String> = HashMap::new();
         for (feed_id, category_id) in sorted {
-            direct_feed_cats.insert(category_id.clone());
             cat_by_feed
                 .entry(feed_id.clone())
                 .or_insert_with(|| category_id.clone());
         }
 
+        // RESOLVED feed->category set: a category whose feeds all resolve
+        // elsewhere (e.g. a stale duplicate toplevel row) gets no card.
+        let direct_feed_cats: HashSet<String> = cat_by_feed.values().cloned().collect();
+
         let title_by_feed: HashMap<String, String> = feed_titles.into_iter().collect();
 
         let mut unread_direct: HashMap<String, i64> = HashMap::new();
-        for (feed_id, category_id) in &feed_mappings {
+        for (feed_id, category_id) in &cat_by_feed {
             let n = unread_by_feed.get(feed_id).copied().unwrap_or(0);
             *unread_direct.entry(category_id.clone()).or_insert(0) += n;
         }
@@ -162,11 +164,16 @@ mod tests {
                 ("f1".into(), "leaf".into()),
                 ("f2".into(), TOPLEVEL.to_string()),
                 ("f2".into(), "leaf".into()),
+                ("f3".into(), TOPLEVEL.to_string()),
             ],
             feed_titles: vec![("f1".into(), "Feed One".into())],
-            unread_by_feed: [("f1".into(), 3i64), ("f2".into(), 5i64)]
-                .into_iter()
-                .collect(),
+            unread_by_feed: [
+                ("f1".into(), 3i64),
+                ("f2".into(), 5i64),
+                ("f3".into(), 7i64),
+            ]
+            .into_iter()
+            .collect(),
             path_by_id: [("root".into(), vec!["Root".to_string()])]
                 .into_iter()
                 .collect(),
@@ -178,10 +185,14 @@ mod tests {
     fn direct_set_and_cat_by_feed_prefer_real_category_over_toplevel() {
         let idx = CategoryIndex::build(inputs());
         assert!(idx.is_direct("leaf"));
-        assert!(idx.is_direct(TOPLEVEL));
+        assert!(idx.is_direct(TOPLEVEL), "f3 maps only to toplevel");
         assert!(!idx.is_direct("root"), "container with no direct feed");
-        assert_eq!(idx.cat_by_feed.get("f2").map(String::as_str), Some("leaf"));
         assert_eq!(idx.cat_by_feed.get("f1").map(String::as_str), Some("leaf"));
+        assert_eq!(idx.cat_by_feed.get("f2").map(String::as_str), Some("leaf"));
+        assert_eq!(
+            idx.cat_by_feed.get("f3").map(String::as_str),
+            Some(TOPLEVEL)
+        );
     }
 
     #[test]
@@ -196,11 +207,11 @@ mod tests {
     #[test]
     fn unread_direct_is_direct_only_and_rolled_up_includes_descendants() {
         let idx = CategoryIndex::build(inputs());
-        // f2 has both a toplevel and a leaf mapping; both rows sum into direct.
+        // f2 resolves to leaf (f1 3 + f2 5); f3 resolves to toplevel (f3 7).
         assert_eq!(idx.unread_direct.get("leaf").copied().unwrap_or(0), 8);
-        assert_eq!(idx.unread_direct.get(TOPLEVEL).copied().unwrap_or(0), 5);
-        // descendants(TOPLEVEL) = [TOPLEVEL, root, leaf] => 5 + 0 + 8
-        assert_eq!(idx.unread_rolled_up.get(TOPLEVEL).copied().unwrap_or(0), 13);
+        assert_eq!(idx.unread_direct.get(TOPLEVEL).copied().unwrap_or(0), 7);
+        // descendants(TOPLEVEL) = [TOPLEVEL, root, leaf] => 7 + 0 + 8
+        assert_eq!(idx.unread_rolled_up.get(TOPLEVEL).copied().unwrap_or(0), 15);
         // descendants(root) = [root, leaf] => 0 + 8
         assert_eq!(idx.unread_rolled_up.get("root").copied().unwrap_or(0), 8);
     }

@@ -15,13 +15,11 @@ pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
     let index = state.engine.category_index().await?;
 
     let db_path = state.engine.data_dir().join("engine/data/database.sqlite");
-    let totals = {
+    let per_feed = {
         let db_path = db_path.clone();
-        tokio::task::spawn_blocking(move || {
-            crate::engine::queries::direct_category_totals_map(&db_path)
-        })
-        .await
-        .map_err(anyhow::Error::from)??
+        tokio::task::spawn_blocking(move || crate::engine::queries::per_feed_totals_map(&db_path))
+            .await
+            .map_err(anyhow::Error::from)??
     };
 
     let card_ids = index.card_ids();
@@ -36,6 +34,21 @@ pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
             .entry(category_id.clone())
             .or_default()
             .push(FeedID::new(feed_id));
+    }
+
+    // Per-card totals over the card's RESOLVED feeds so counts and items always
+    // match (a feed with a stale duplicate mapping counts in exactly one card).
+    let mut totals: HashMap<String, (i64, i64)> = HashMap::new();
+    for (category_id, feed_ids) in &feed_ids_by_card {
+        let mut total = 0i64;
+        let mut unread = 0i64;
+        for fid in feed_ids {
+            if let Some((t, u)) = per_feed.get(fid.as_str()) {
+                total += t;
+                unread += u;
+            }
+        }
+        totals.insert(category_id.clone(), (total, unread));
     }
 
     let mut tasks = tokio::task::JoinSet::new();
@@ -70,12 +83,12 @@ pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
 
     let mut cards = Vec::with_capacity(card_ids.len());
     for id in &card_ids {
-        let (total, _) = totals.get(id).copied().unwrap_or((0, 0));
+        let (total, unread) = totals.get(id).copied().unwrap_or((0, 0));
         cards.push(CategoryCard {
             category_id: id.clone(),
             name: index.display_name(id),
             total_count: total,
-            unread_count: index.unread_direct.get(id).copied().unwrap_or(0),
+            unread_count: unread,
             items: items_by_card.remove(id).unwrap_or_default(),
         });
     }

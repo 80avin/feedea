@@ -404,6 +404,15 @@ mod tests {
                 stmt.execute(rusqlite::params![id, now]).unwrap();
             }
         }
+        {
+            let mut stmt = db
+                .conn
+                .prepare("INSERT INTO saved_tags (article_id, tag) VALUES (?1, ?2)")
+                .unwrap();
+            for id in ids.iter().take(5) {
+                stmt.execute(rusqlite::params![id, "t1"]).unwrap();
+            }
+        }
         db.unsave_articles(&ids).unwrap();
         let (saved, _total) = db.saved_articles(0, 2000).unwrap();
         assert_eq!(

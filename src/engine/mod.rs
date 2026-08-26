@@ -374,12 +374,6 @@ impl Engine {
         self.with_nf(|nf| nf.get_categories()).await
     }
 
-    pub async fn category_unread_map(
-        &self,
-    ) -> anyhow::Result<std::collections::HashMap<String, i64>> {
-        Ok(self.category_index().await?.unread_rolled_up)
-    }
-
     pub async fn add_category(&self, name: &str, parent: Option<&str>) -> anyhow::Result<String> {
         let _guard = self.mutation_guard().await;
         let parent = parent.map(news_flash::models::CategoryID::new);
