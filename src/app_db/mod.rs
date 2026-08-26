@@ -153,6 +153,22 @@ impl AppDb {
         Ok(())
     }
 
+    pub fn unsave_articles(&mut self, article_ids: &[String]) -> anyhow::Result<()> {
+        if article_ids.is_empty() {
+            return Ok(());
+        }
+        let tx = self.conn.transaction()?;
+        for chunk in article_ids.chunks(500) {
+            let placeholders = vec!["?"; chunk.len()].join(",");
+            for table in ["saved", "saved_tags"] {
+                let sql = format!("DELETE FROM {table} WHERE article_id IN ({placeholders})");
+                tx.execute(&sql, rusqlite::params_from_iter(chunk))?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn saved_articles(
         &self,
         offset: i64,
@@ -350,6 +366,56 @@ mod tests {
                 "missing table {t}: {tables:?}"
             );
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unsave_articles_bulk_deletes() {
+        let dir = tmp_dir();
+        let mut db = open(&dir).unwrap();
+        db.save_article("a1", None, &["t1".to_string()]).unwrap();
+        db.save_article("a2", None, &["t1".to_string()]).unwrap();
+        db.unsave_articles(&[]).unwrap();
+        db.unsave_articles(&["a1".to_string(), "a2".to_string()])
+            .unwrap();
+        let (saved, total) = db.saved_articles(0, 50).unwrap();
+        assert_eq!(saved.len(), 0);
+        assert_eq!(total, 0);
+        let tags: i64 = db
+            .conn
+            .query_row("SELECT COUNT(*) FROM saved_tags", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(tags, 0, "saved_tags rows must be bulk-deleted too");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unsave_articles_chunks_large_batches() {
+        let dir = tmp_dir();
+        let mut db = open(&dir).unwrap();
+        let ids: Vec<String> = (0..1001).map(|i| format!("chunk-a-{i}")).collect();
+        {
+            let mut stmt = db
+                .conn
+                .prepare("INSERT INTO saved (article_id, saved_at, note, updated_at) VALUES (?1, ?2, NULL, ?2)")
+                .unwrap();
+            let now = chrono::Utc::now().to_rfc3339();
+            for id in &ids {
+                stmt.execute(rusqlite::params![id, now]).unwrap();
+            }
+        }
+        db.unsave_articles(&ids).unwrap();
+        let (saved, _total) = db.saved_articles(0, 2000).unwrap();
+        assert_eq!(
+            saved.len(),
+            0,
+            "all 1001 rows must be deleted across chunk boundaries"
+        );
+        let tags: i64 = db
+            .conn
+            .query_row("SELECT COUNT(*) FROM saved_tags", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(tags, 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

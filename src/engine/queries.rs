@@ -116,6 +116,9 @@ pub fn category_totals(db_path: &Path) -> anyhow::Result<Vec<CategoryTotals>> {
 }
 
 fn direct_totals(conn: &Connection) -> anyhow::Result<HashMap<String, (i64, i64)>> {
+    // Strict-direct counts reflect ALL feed_mapping rows: a feed with a stale duplicate
+    // mapping contributes to both a real card and the toplevel card's counts, while its
+    // items still land only under the preferred category.
     let mut stmt = conn.prepare(
         "SELECT fm.category_id,
                 COUNT(a.article_id) AS total,

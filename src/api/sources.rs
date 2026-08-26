@@ -129,9 +129,7 @@ pub async fn remove(
     ensure_feed_exists(&state, &id).await?;
     let article_ids = state.engine.feed_article_ids(&id).await?;
     let mut app_db = state.app_db.lock().await;
-    for article_id in article_ids {
-        app_db.unsave_article(&article_id)?;
-    }
+    app_db.unsave_articles(&article_ids)?;
     drop(app_db);
     state.engine.remove_feed(&id).await?;
     Ok(Json(json!({ "ok": true })))

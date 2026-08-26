@@ -92,9 +92,7 @@ pub async fn remove(
     if req.remove_children {
         let article_ids = state.engine.category_article_ids(&id).await?;
         let mut app_db = state.app_db.lock().await;
-        for article_id in article_ids {
-            app_db.unsave_article(&article_id)?;
-        }
+        app_db.unsave_articles(&article_ids)?;
     }
     state
         .engine
