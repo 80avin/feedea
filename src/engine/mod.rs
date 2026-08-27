@@ -497,8 +497,18 @@ impl Engine {
             }
             let mut nodes = Vec::new();
             if let Some(children) = index.children_by_parent.get(parent_id) {
+                // Deterministic ordering: the API is the single source of truth,
+                // so tree children (sidebar, category pickers) are alphabetical.
+                let mut children: Vec<String> = children.clone();
+                children.sort_by(|a, b| {
+                    let an = index.name_by_id.get(a).unwrap_or(a);
+                    let bn = index.name_by_id.get(b).unwrap_or(b);
+                    an.to_lowercase()
+                        .cmp(&bn.to_lowercase())
+                        .then_with(|| an.cmp(bn))
+                });
                 for child in children {
-                    let id = child.clone();
+                    let id = child;
                     nodes.push(crate::dto::CategoryNode {
                         category_id: id.clone(),
                         name: index.name_by_id.get(&id).cloned().unwrap_or_default(),

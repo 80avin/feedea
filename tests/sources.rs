@@ -1723,3 +1723,145 @@ async fn delete_empty_categories_removes_only_empty_ones() {
     assert!(!names_left.contains(&"Parent"));
     assert!(!names_left.contains(&"Empty Child"));
 }
+
+async fn create_category_id(app: &axum::Router, cookie: &str, name: &str) -> String {
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/categories")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, cookie)
+                .body(Body::from(serde_json::json!({ "name": name }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    serde_json::from_slice::<serde_json::Value>(&body).unwrap()["category_id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+async fn add_source_with_category(
+    app: &axum::Router,
+    cookie: &str,
+    url: &str,
+    title: &str,
+    category_id: Option<&str>,
+) {
+    let mut body = serde_json::json!({ "url": url, "title": title });
+    if let Some(cat) = category_id {
+        body["category_id"] = serde_json::Value::String(cat.to_string());
+    }
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sources")
+                .header("content-type", "application/json")
+                .header(axum::http::header::COOKIE, cookie)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+fn rss_with_title(title: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>{title}</title>
+    <link>http://127.0.0.1/</link>
+    <description>{title}</description>
+    <item>
+      <title>{title} Article</title>
+      <link>http://example.com/{title}</link>
+      <guid isPermaLink="false">{title}-1</guid>
+      <pubDate>Mon, 11 Aug 2026 10:00:00 GMT</pubDate>
+      <description>{title} body.</description>
+    </item>
+  </channel>
+</rss>"#
+    )
+}
+
+#[tokio::test]
+async fn sources_list_and_tree_are_sorted_alphabetically() {
+    let (feed_url, app, _server, _db) = spawn_app().await;
+    let cookie = cookie_pair(&login_cookie(&app).await);
+
+    // Categories created out of alphabetical order, and feeds added in
+    // non-alphabetical order, so the API must sort them. Each feed needs its
+    // own server because add-source derives the title from the channel title.
+    let zulu_srv = feed_server::FeedServer::start(rss_with_title("Zulu"), 10);
+    let beta_srv = feed_server::FeedServer::start(rss_with_title("Beta"), 10);
+    let alpha_srv = feed_server::FeedServer::start(rss_with_title("Alpha"), 10);
+
+    let zeta = create_category_id(&app, &cookie, "Zeta").await;
+    let alpha = create_category_id(&app, &cookie, "Alpha").await;
+    add_source_with_category(&app, &cookie, &zulu_srv.url, "Zulu", Some(&zeta)).await;
+    add_source_with_category(&app, &cookie, &beta_srv.url, "Beta", Some(&zeta)).await;
+    add_source_with_category(&app, &cookie, &alpha_srv.url, "Alpha", Some(&alpha)).await;
+    add_source_with_category(&app, &cookie, &feed_url, "Test Feed", None).await;
+
+    let groups = get_groups(&app, &cookie).await;
+    let names: Vec<String> = groups
+        .iter()
+        .map(|g| g["category_name"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        names,
+        vec!["Alpha", "Zeta", "Uncategorized"],
+        "groups sorted by category name with Uncategorized last: {names:?}"
+    );
+
+    let zeta_group = groups
+        .iter()
+        .find(|g| g["category_name"] == "Zeta")
+        .expect("zeta group should exist");
+    let feeds: Vec<String> = zeta_group["feeds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["title"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        feeds,
+        vec!["Beta", "Zulu"],
+        "feeds sorted by title within a group: {feeds:?}"
+    );
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/categories")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let tree: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let top: Vec<String> = tree["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["name"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        top,
+        vec!["Alpha", "Zeta"],
+        "tree children sorted by name: {top:?}"
+    );
+}

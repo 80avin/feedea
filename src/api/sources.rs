@@ -59,6 +59,30 @@ pub async fn list(State(state): State<AppState>) -> ApiResult<Json<Value>> {
             });
         }
     }
+    // Deterministic ordering: the API is the single source of truth so every
+    // consumer (Sources page, sidebar, pickers) agrees. Categories by name
+    // with Uncategorized last, feeds by title within each category.
+    groups.sort_by(|a, b| {
+        let ak = (
+            a.category_name == "Uncategorized",
+            a.category_name.to_lowercase(),
+            a.category_name.as_str(),
+        );
+        let bk = (
+            b.category_name == "Uncategorized",
+            b.category_name.to_lowercase(),
+            b.category_name.as_str(),
+        );
+        ak.cmp(&bk)
+    });
+    for group in &mut groups {
+        group.feeds.sort_by(|a, b| {
+            a.title
+                .to_lowercase()
+                .cmp(&b.title.to_lowercase())
+                .then_with(|| a.title.cmp(&b.title))
+        });
+    }
     Ok(Json(json!({ "groups": groups })))
 }
 
