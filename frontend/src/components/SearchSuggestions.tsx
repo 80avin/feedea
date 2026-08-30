@@ -19,8 +19,8 @@ export default function SearchSuggestions({
           >
             <FeedAvatar feedId={s.feed_id} title={s.feed_title} className="h-6 w-6" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-app-text">{s.title}</p>
-              {s.feed_title && <p className="truncate text-xs text-app-text-faint">{s.feed_title}</p>}
+              <p className="truncate text-sm text-app-text" title={s.title ?? ''}>{s.title}</p>
+              {s.feed_title && <p className="truncate text-xs text-app-text-faint" title={s.feed_title}>{s.feed_title}</p>}
             </div>
           </button>
         </li>

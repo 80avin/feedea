@@ -47,11 +47,11 @@ function TimelineItem({ item }: { item: Headline }) {
           <FeedAvatar feedId={item.feed_id} title={item.feed_title} className="h-8 w-8" />
           <div className="min-w-0 flex-1">
             {item.title && (
-              <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>
+              <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`} title={item.title}>
                 {item.title}
               </p>
             )}
-            <p className="truncate text-xs text-app-text-faint">
+            <p className="truncate text-xs text-app-text-faint" title={item.feed_title}>
               {item.date ? formatAge(item.date) : ""}
               {item.date && item.feed_title ? " · " : ""}
               {item.feed_title && (

@@ -73,7 +73,7 @@ function SectionHeading({
     <h3 className="flex items-center justify-between gap-2 px-4 pb-1 pt-3">
       <span className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-wider text-app-text-faint">
         <Icon className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">{label}</span>
+        <span className="truncate" title={label}>{label}</span>
       </span>
       {actions && <span className="flex shrink-0 items-center gap-0.5">{actions}</span>}
     </h3>
@@ -117,7 +117,7 @@ function TreeLink({ node, depth }: { node: CategoryNode; depth: number }) {
             : "text-app-text-muted hover:bg-app-hover/60 hover:text-app-text",
         )}
       >
-        <span className="truncate">{node.name}</span>
+        <span className="truncate" title={node.name}>{node.name}</span>
         {node.unread_count > 0 && (
           <span className="rounded bg-app-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-app-text-2">
             {node.unread_count}
@@ -152,7 +152,7 @@ function FeedLink({ feed }: { feed: FeedSummary }) {
         )}
         {...triggerProps}
       >
-        <span className="truncate">{feed.title}</span>
+        <span className="truncate" title={feed.title}>{feed.title}</span>
         {feed.unread_count > 0 && (
           <span className="rounded bg-app-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-app-text-2">
             {feed.unread_count}

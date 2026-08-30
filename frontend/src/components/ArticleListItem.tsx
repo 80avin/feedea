@@ -48,7 +48,7 @@ export default function ArticleListItem({ item, hideFeed }: { item: Headline; hi
       >
         <div className="flex items-start justify-between gap-3 py-2">
           <div className="min-w-0 flex-1">
-            {item.title && <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>{item.title}</p>}
+            {item.title && <p title={item.title} className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>{item.title}</p>}
             {!hideFeed && item.feed_title && (
               <FeedNameLink
                 feedId={item.feed_id}

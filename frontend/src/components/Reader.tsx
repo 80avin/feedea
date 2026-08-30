@@ -91,6 +91,7 @@ export default function Reader() {
               target="_blank"
               rel="noopener noreferrer"
               className="truncate text-accent hover:text-accent-soft-foreground"
+              title={hostOf(data.url)}
             >
               {hostOf(data.url)}
             </a>

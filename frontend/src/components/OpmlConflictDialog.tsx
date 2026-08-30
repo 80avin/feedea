@@ -150,7 +150,7 @@ export default function OpmlConflictDialog({
                         </span>
                       </div>
 
-                      <p className="mt-2 truncate text-xs text-app-text-muted">{conflict.opml.url}</p>
+                      <p className="mt-2 truncate text-xs text-app-text-muted" title={conflict.opml.url}>{conflict.opml.url}</p>
                       {(conflict.occurrences ?? 1) > 1 && (
                         <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
                           This source appears {conflict.occurrences}× in the file
@@ -179,7 +179,7 @@ export default function OpmlConflictDialog({
                                     <span className={`block ${changedClass(fieldChanged(match.title, conflict.opml.title))}`}>{match.title}</span>
                                     <span className={`block text-xs ${changedClass(categoryChanged(match.category, conflict.opml.category))}`}>{categoryLabel(match.category)}</span>
                                     {fieldChanged(match.url ?? "", conflict.opml.url) && (
-                                      <span className="block truncate text-xs text-app-text-faint">{match.url}</span>
+                                      <span className="block truncate text-xs text-app-text-faint" title={match.url}>{match.url}</span>
                                     )}
                                   </span>
                                 </label>
@@ -200,7 +200,7 @@ export default function OpmlConflictDialog({
                               <span className={`block ${changedClass(fieldChanged(selectedMatch(conflict)?.title ?? "", conflict.opml.title))}`}>{conflict.opml.title}</span>
                               <span className={`block text-xs ${changedClass(categoryChanged(selectedMatch(conflict)?.category ?? [], conflict.opml.category))}`}>{categoryLabel(conflict.opml.category)}</span>
                               {fieldChanged(selectedMatch(conflict)?.url ?? "", conflict.opml.url) && (
-                                <span className="block truncate text-xs text-app-text-faint">{conflict.opml.url}</span>
+                                <span className="block truncate text-xs text-app-text-faint" title={conflict.opml.url}>{conflict.opml.url}</span>
                               )}
                             </span>
                           </label>

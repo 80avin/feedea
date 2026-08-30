@@ -62,7 +62,7 @@ export default function Saved() {
                     >
                       <div className="min-w-0 flex-1">
                         {item.title && (
-                          <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`}>
+                          <p className={`truncate text-sm ${item.unread ? "font-semibold text-app-text" : "text-app-text-2"}`} title={item.title}>
                             {item.title}
                           </p>
                         )}

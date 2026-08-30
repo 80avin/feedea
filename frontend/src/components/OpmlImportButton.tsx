@@ -56,7 +56,10 @@ export default function OpmlImportButton({ className }: { className?: string }) 
         <ArrowUpTrayIcon className="h-4 w-4" />
       </button>
       {status && (
-        <span className="absolute right-0 top-full z-10 mt-1 max-w-48 truncate rounded-md border border-app-border bg-app-bg px-2 py-1 text-xs text-app-text-faint shadow-lg">
+        <span
+          className="absolute right-0 top-full z-10 mt-1 max-w-48 truncate rounded-md border border-app-border bg-app-bg px-2 py-1 text-xs text-app-text-faint shadow-lg"
+          title={status}
+        >
           {status}
         </span>
       )}
