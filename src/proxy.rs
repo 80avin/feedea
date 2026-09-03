@@ -13,13 +13,14 @@ static PROXY_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 fn proxy_client() -> &'static reqwest::Client {
     PROXY_CLIENT.get_or_init(|| {
         reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
+            .redirect(reqwest::redirect::Policy::limited(5))
             .build()
             .expect("failed to build proxy client")
     })
 }
 
 const MAX_BODY_BYTES: u64 = 20 * 1024 * 1024;
+const MAX_REDIRECTS: usize = 5;
 
 #[derive(Deserialize)]
 pub struct ImgParams {
@@ -39,25 +40,10 @@ pub async fn proxy_image(
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
         return (StatusCode::BAD_REQUEST, "only http/https allowed").into_response();
     }
-    let client = if state.allow_private_proxy {
-        proxy_client()
-    } else {
-        let Some(addrs) = resolve_validated(&parsed).await else {
-            return (StatusCode::BAD_GATEWAY, "blocked target").into_response();
-        };
-        let Some(host) = parsed.host_str() else {
-            return (StatusCode::BAD_GATEWAY, "blocked target").into_response();
-        };
-        let Ok(client) = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .resolve_to_addrs(host, &addrs)
-            .build()
-        else {
-            return (StatusCode::BAD_GATEWAY, "client build failed").into_response();
-        };
-        return fetch(&client, &parsed).await;
-    };
-    fetch(client, &parsed).await
+    if state.allow_private_proxy {
+        return fetch(proxy_client(), &parsed).await;
+    }
+    fetch_validated(&parsed).await
 }
 
 async fn fetch(client: &reqwest::Client, parsed: &url::Url) -> Response {
@@ -87,6 +73,68 @@ async fn fetch(client: &reqwest::Client, parsed: &url::Url) -> Response {
         }
         Err(_) => (StatusCode::BAD_GATEWAY, "upstream unavailable").into_response(),
     }
+}
+
+async fn fetch_validated(initial: &url::Url) -> Response {
+    let mut url = initial.clone();
+    for _ in 0..=MAX_REDIRECTS {
+        let Some(addrs) = resolve_validated(&url).await else {
+            return (StatusCode::BAD_GATEWAY, "blocked target").into_response();
+        };
+        let Some(host) = url.host_str().map(|h| h.to_string()) else {
+            return (StatusCode::BAD_GATEWAY, "blocked target").into_response();
+        };
+        let Ok(client) = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .resolve_to_addrs(&host, &addrs)
+            .build()
+        else {
+            return (StatusCode::BAD_GATEWAY, "client build failed").into_response();
+        };
+        let resp = match client.get(url.as_str()).send().await {
+            Ok(r) => r,
+            Err(_) => return (StatusCode::BAD_GATEWAY, "upstream unavailable").into_response(),
+        };
+        if resp.status().is_redirection() {
+            let Some(loc) = resp
+                .headers()
+                .get(header::LOCATION)
+                .and_then(|v| v.to_str().ok())
+            else {
+                return (StatusCode::BAD_GATEWAY, "upstream error").into_response();
+            };
+            let Ok(next) = url.join(loc) else {
+                return (StatusCode::BAD_GATEWAY, "upstream error").into_response();
+            };
+            if next.scheme() != "http" && next.scheme() != "https" {
+                return (StatusCode::BAD_GATEWAY, "blocked target").into_response();
+            }
+            url = next;
+            continue;
+        }
+        if !resp.status().is_success() {
+            return (StatusCode::BAD_GATEWAY, "upstream error").into_response();
+        }
+        if resp
+            .content_length()
+            .is_some_and(|len| len > MAX_BODY_BYTES)
+        {
+            return (StatusCode::PAYLOAD_TOO_LARGE, "image too large").into_response();
+        }
+        let content_type = resp
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "application/octet-stream".to_string());
+        let bytes = match resp.bytes().await {
+            Ok(b) if b.len() as u64 <= MAX_BODY_BYTES => b,
+            Ok(_) => return (StatusCode::PAYLOAD_TOO_LARGE, "image too large").into_response(),
+            Err(_) => return (StatusCode::BAD_GATEWAY, "read failed").into_response(),
+        };
+        return ([(header::CONTENT_TYPE, content_type)], bytes).into_response();
+    }
+    (StatusCode::BAD_GATEWAY, "too many redirects").into_response()
 }
 
 async fn resolve_validated(parsed: &url::Url) -> Option<Vec<SocketAddr>> {
