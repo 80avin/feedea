@@ -179,7 +179,7 @@ export default function OpmlConflictDialog({
                                     <span className={`block ${changedClass(fieldChanged(match.title, conflict.opml.title))}`}>{match.title}</span>
                                     <span className={`block text-xs ${changedClass(categoryChanged(match.category, conflict.opml.category))}`}>{categoryLabel(match.category)}</span>
                                     {fieldChanged(match.url ?? "", conflict.opml.url) && (
-                                      <span className="block truncate text-xs text-app-text-faint" title={match.url}>{match.url}</span>
+                                      <span className="block truncate text-xs text-app-text-faint" title={match.url ?? undefined}>{match.url}</span>
                                     )}
                                   </span>
                                 </label>

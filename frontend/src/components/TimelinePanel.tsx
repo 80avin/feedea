@@ -51,7 +51,7 @@ function TimelineItem({ item }: { item: Headline }) {
                 {item.title}
               </p>
             )}
-            <p className="truncate text-xs text-app-text-faint" title={item.feed_title}>
+              <p className="truncate text-xs text-app-text-faint" title={item.feed_title ?? undefined}>
               {item.date ? formatAge(item.date) : ""}
               {item.date && item.feed_title ? " · " : ""}
               {item.feed_title && (
