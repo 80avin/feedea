@@ -133,6 +133,8 @@ variable:
 | `--host`                  | `FEEDEA_HOST`                | `0.0.0.0`                   | listen address                     |
 | `--port`                  | `FEEDEA_PORT`                | `3000`                      | listen port                        |
 | `--allow-private-proxy`   | `FEEDEA_ALLOW_PRIVATE_PROXY` | `false`                     | allow proxying images from private networks |
+| `--memory-trim-minutes`   | `FEEDEA_MEMORY_TRIM_MINUTES` | `5`                         | periodic allocator trim interval (0 disables) |
+| `--memory-arena-max`      | `FEEDEA_MEMORY_ARENA_MAX`    | `2`                         | max glibc malloc arenas (Linux; bounds RSS) |
 
 Example:
 

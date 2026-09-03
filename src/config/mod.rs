@@ -12,6 +12,18 @@ pub struct Cli {
     pub port: u16,
     #[arg(long, env = "FEEDEA_ALLOW_PRIVATE_PROXY", default_value_t = false)]
     pub allow_private_proxy: bool,
+    #[arg(
+        long,
+        env = "FEEDEA_MEMORY_TRIM_MINUTES",
+        default_value_t = crate::memtrim::DEFAULT_TRIM_MINUTES
+    )]
+    pub memory_trim_minutes: u64,
+    #[arg(
+        long,
+        env = "FEEDEA_MEMORY_ARENA_MAX",
+        default_value_t = crate::memtrim::DEFAULT_ARENA_MAX
+    )]
+    pub memory_arena_max: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -20,6 +32,8 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub allow_private_proxy: bool,
+    pub memory_trim_minutes: u64,
+    pub memory_arena_max: i32,
 }
 
 impl Config {
@@ -30,6 +44,8 @@ impl Config {
             host: cli.host,
             port: cli.port,
             allow_private_proxy: cli.allow_private_proxy,
+            memory_trim_minutes: cli.memory_trim_minutes,
+            memory_arena_max: cli.memory_arena_max,
         }
     }
 
@@ -69,6 +85,8 @@ mod tests {
             host: "127.0.0.1".into(),
             port: 3000,
             allow_private_proxy: false,
+            memory_trim_minutes: crate::memtrim::DEFAULT_TRIM_MINUTES,
+            memory_arena_max: crate::memtrim::DEFAULT_ARENA_MAX,
         };
         assert_eq!(
             cfg.data_file("feedea.sqlite"),
@@ -86,5 +104,28 @@ mod tests {
         unsafe { std::env::remove_var("FEEDEA_ALLOW_PRIVATE_PROXY") };
         let cli = Cli::try_parse_from(["feedea"]).unwrap();
         assert!(!cli.allow_private_proxy);
+    }
+
+    #[test]
+    fn cli_reads_memory_trim_env_and_defaults() {
+        unsafe { std::env::set_var("FEEDEA_MEMORY_TRIM_MINUTES", "30") };
+        let cli = Cli::try_parse_from(["feedea"]).unwrap();
+        assert_eq!(cli.memory_trim_minutes, 30);
+        unsafe { std::env::remove_var("FEEDEA_MEMORY_TRIM_MINUTES") };
+        let cli = Cli::try_parse_from(["feedea"]).unwrap();
+        assert_eq!(
+            cli.memory_trim_minutes,
+            crate::memtrim::DEFAULT_TRIM_MINUTES
+        );
+    }
+
+    #[test]
+    fn cli_reads_memory_arena_max_env_and_defaults() {
+        unsafe { std::env::set_var("FEEDEA_MEMORY_ARENA_MAX", "4") };
+        let cli = Cli::try_parse_from(["feedea"]).unwrap();
+        assert_eq!(cli.memory_arena_max, 4);
+        unsafe { std::env::remove_var("FEEDEA_MEMORY_ARENA_MAX") };
+        let cli = Cli::try_parse_from(["feedea"]).unwrap();
+        assert_eq!(cli.memory_arena_max, crate::memtrim::DEFAULT_ARENA_MAX);
     }
 }

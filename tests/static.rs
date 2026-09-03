@@ -24,6 +24,8 @@ async fn spawn_app() -> axum::Router {
         host: "127.0.0.1".into(),
         port: 3000,
         allow_private_proxy: false,
+        memory_trim_minutes: feedea::memtrim::DEFAULT_TRIM_MINUTES,
+        memory_arena_max: feedea::memtrim::DEFAULT_ARENA_MAX,
     };
     let engine = Engine::new(&cfg).await.unwrap();
     let app_db = Arc::new(Mutex::new(app_db::open(&cfg.data_dir).unwrap()));

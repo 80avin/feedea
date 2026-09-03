@@ -5,6 +5,7 @@ pub mod auth;
 pub mod config;
 pub mod dto;
 pub mod engine;
+pub mod memtrim;
 pub mod proxy;
 
 use config::Config;
@@ -29,6 +30,10 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         app_db.clone(),
         engine::sync::DEFAULT_SYNC_INTERVAL,
     ));
+    let trim_interval = std::time::Duration::from_secs(config.memory_trim_minutes * 60);
+    if config.memory_trim_minutes > 0 {
+        tokio::spawn(memtrim::trim_loop(trim_interval));
+    }
     let state = AppState {
         engine,
         app_db,

@@ -103,6 +103,8 @@ See the README table. All flags map to env vars:
 | `FEEDEA_HOST`                 | `0.0.0.0`          |
 | `FEEDEA_PORT`                 | `3000`             |
 | `FEEDEA_ALLOW_PRIVATE_PROXY`  | `false`            |
+| `FEEDEA_MEMORY_TRIM_MINUTES`  | `5`                |
+| `FEEDEA_MEMORY_ARENA_MAX`     | `2`                |
 
 ## Data directory layout
 

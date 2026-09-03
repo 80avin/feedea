@@ -115,6 +115,8 @@ mod tests {
             host: "127.0.0.1".into(),
             port: 0,
             allow_private_proxy: false,
+            memory_trim_minutes: crate::memtrim::DEFAULT_TRIM_MINUTES,
+            memory_arena_max: crate::memtrim::DEFAULT_ARENA_MAX,
         };
         let engine = Engine::new(&config).await.unwrap();
         let app_db = Arc::new(Mutex::new(app_db::open(&dir).unwrap()));

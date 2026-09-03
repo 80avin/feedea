@@ -59,6 +59,8 @@ async fn spawn_app() -> (
         host: "127.0.0.1".into(),
         port: 0,
         allow_private_proxy: false,
+        memory_trim_minutes: feedea::memtrim::DEFAULT_TRIM_MINUTES,
+        memory_arena_max: feedea::memtrim::DEFAULT_ARENA_MAX,
     };
     let engine = Engine::new(&config).await.unwrap();
     let mut db = app_db::open(&config.data_dir).unwrap();
