@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link } from "react-router";
 import { Badge, Button, Popover } from "@heroui/react";
 import {
@@ -7,13 +7,44 @@ import {
   ServerStackIcon,
 } from "@heroicons/react/24/outline";
 import { encodeId } from "../api/client";
-import type { FeedSummary } from "../api/types";
-import { useSources } from "../state/hooks";
+import type { FeedSummary, SourceGroup } from "../api/types";
+import { useCategories, useSources } from "../state/hooks";
+import { categoryPathFromLeaf } from "../utils/categories";
 import AddSourceDialog from "../components/AddSourceDialog";
 import OpmlButtons from "../components/OpmlButtons";
 import SourceMenu from "../components/SourceMenu";
 import FeedAvatar from "../components/FeedAvatar";
 import { ErrorState, LoadingState } from "../components/Feedback";
+
+function CategoryHeading({ group }: { group: SourceGroup }) {
+  const { data: categoriesData } = useCategories();
+  const segments = categoryPathFromLeaf(
+    categoriesData?.categories ?? [],
+    group.category_id,
+  );
+  if (segments.length === 0) {
+    return (
+      <h3 className="px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-app-text-faint">
+        {group.category_name}
+      </h3>
+    );
+  }
+  return (
+    <h3 className="flex flex-wrap items-center gap-x-1 px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-app-text-faint">
+      {segments.map((segment, index) => (
+        <Fragment key={segment.id}>
+          {index > 0 && <span aria-hidden>{" / "}</span>}
+          <Link
+            to={`/feeds?category=${encodeURIComponent(segment.id)}`}
+            className="rounded px-0.5 hover:bg-app-hover/60 hover:text-app-text"
+          >
+            {segment.name}
+          </Link>
+        </Fragment>
+      ))}
+    </h3>
+  );
+}
 
 function SourceRow({ feed }: { feed: FeedSummary }) {
   return (
@@ -100,9 +131,7 @@ export default function Sources() {
           totalFeeds > 0 &&
           groups.map((group) => (
             <section key={group.category_id} className="mb-4">
-              <h3 className="px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-app-text-faint">
-                {group.category_name}
-              </h3>
+              <CategoryHeading group={group} />
               <ul className="flex flex-col gap-0.5">
                 {group.feeds.map((feed) => (
                   <SourceRow key={feed.id} feed={feed} />
