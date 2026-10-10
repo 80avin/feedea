@@ -7,11 +7,35 @@ use serde_json::{Value, json};
 use crate::AppState;
 use crate::api::error::ApiResult;
 use crate::dto::CategoryCard;
-use news_flash::models::{ArticleFilter, ArticleOrder, FeedID, OrderBy};
+use news_flash::models::{ArticleFilter, ArticleOrder, FeedID, OrderBy, Read};
 
 const MAX_OVERVIEW_ITEMS: i64 = 6;
 
-pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
+pub fn card_article_filter(feed_ids: Vec<FeedID>, unread_only: bool) -> ArticleFilter {
+    ArticleFilter {
+        order: Some(ArticleOrder::NewestFirst),
+        order_by: Some(OrderBy::Published),
+        limit: Some(MAX_OVERVIEW_ITEMS),
+        feeds: Some(feed_ids),
+        unread: unread_only.then_some(Read::Unread),
+        ..ArticleFilter::default()
+    }
+}
+
+#[derive(serde::Deserialize, Default)]
+pub struct OverviewParams {
+    #[serde(default)]
+    pub unread_only: Option<String>,
+}
+
+fn is_truthy(v: Option<&String>) -> bool {
+    matches!(v.map(String::as_str), Some("1") | Some("true"))
+}
+
+pub async fn overview(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<OverviewParams>,
+) -> ApiResult<Json<Value>> {
     let index = state.engine.category_index().await?;
 
     let db_path = state.engine.data_dir().join("engine/data/database.sqlite");
@@ -52,6 +76,7 @@ pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
     }
 
     let mut tasks = tokio::task::JoinSet::new();
+    let unread_only = is_truthy(params.unread_only.as_ref());
     for id in &card_ids {
         let Some(feed_ids) = feed_ids_by_card.get(id) else {
             continue;
@@ -60,13 +85,7 @@ pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
         let id = id.clone();
         let feed_ids = feed_ids.clone();
         tasks.spawn(async move {
-            let filter = ArticleFilter {
-                order: Some(ArticleOrder::NewestFirst),
-                order_by: Some(OrderBy::Published),
-                limit: Some(MAX_OVERVIEW_ITEMS),
-                feeds: Some(feed_ids),
-                ..ArticleFilter::default()
-            };
+            let filter = card_article_filter(feed_ids, unread_only);
             let result = engine.with_nf(move |nf| nf.get_fat_articles(filter)).await;
             (id, result)
         });
@@ -104,4 +123,19 @@ pub async fn overview(State(state): State<AppState>) -> ApiResult<Json<Value>> {
         "cards": cards,
         "all": { "total_count": all_total, "unread_count": all_unread },
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn card_filter_sets_unread_only_when_requested() {
+        let feeds = vec![FeedID::new("f1")];
+        let off = card_article_filter(feeds.clone(), false);
+        assert_eq!(off.unread, None);
+        assert_eq!(off.limit, Some(super::MAX_OVERVIEW_ITEMS));
+        let on = card_article_filter(feeds, true);
+        assert_eq!(on.unread, Some(Read::Unread));
+    }
 }
