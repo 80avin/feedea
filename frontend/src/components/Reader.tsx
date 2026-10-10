@@ -61,7 +61,7 @@ export default function Reader() {
   if (!data) return null;
 
   return (
-    <div className="flex h-full flex-col pb-20 lg:pb-0">
+    <div className="flex h-full flex-col pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0">
       <div className="p-4 pb-0">
         <div className="flex items-start gap-2">
           <button
@@ -102,7 +102,7 @@ export default function Reader() {
         </div>
       </div>
 
-      <div className="mt-4 min-h-0 flex-1 px-4 pb-4">
+      <div className="mt-4 min-h-0 flex-1 scroll-pb-28 px-4 pb-8">
         <ArticleHtml html={data.html} summary={data.summary} plainText={data.plain_text} />
         {data.note && (
           <div className="mt-6 rounded-lg border border-accent/30 bg-accent-soft p-4" data-reader-note>
@@ -113,7 +113,7 @@ export default function Reader() {
       </div>
 
       <div
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-app-border bg-app-bg/95 px-4 py-1.5 backdrop-blur lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-app-border bg-app-bg/95 px-4 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden"
         data-reader-bar
       >
         <ReaderActions article={data} onSaveClick={() => setSaveOpen(true)} layout="bar" />
