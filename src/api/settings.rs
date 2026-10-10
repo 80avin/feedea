@@ -23,6 +23,9 @@ pub struct UpdateSettings {
     pub sync_interval_minutes: Option<i64>,
     #[serde(default, deserialize_with = "deserialize_keep_articles_days")]
     pub keep_articles_days: Option<Option<i64>>,
+    pub offline_cache_overview: Option<bool>,
+    pub offline_cache_recent: Option<bool>,
+    pub offline_recent_count: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -36,6 +39,9 @@ pub async fn get(State(state): State<AppState>) -> ApiResult<Json<Settings>> {
     let theme = app_db.theme()?;
     let accent = app_db.accent()?;
     let sync_interval_minutes = app_db.sync_interval_minutes()?;
+    let offline_cache_overview = app_db.offline_cache_overview()?;
+    let offline_cache_recent = app_db.offline_cache_recent()?;
+    let offline_recent_count = app_db.offline_recent_count()?;
     drop(app_db);
     let keep_articles_days = state.engine.keep_articles_days().await?;
     let stats = build_stats(&state).await?;
@@ -44,6 +50,9 @@ pub async fn get(State(state): State<AppState>) -> ApiResult<Json<Settings>> {
         accent,
         sync_interval_minutes,
         keep_articles_days,
+        offline_cache_overview,
+        offline_cache_recent,
+        offline_recent_count,
         stats,
     }))
 }
@@ -72,6 +81,18 @@ pub async fn update(
     }
     if let Some(days) = req.keep_articles_days {
         state.engine.set_keep_articles_days(days).await?;
+    }
+    if let Some(v) = req.offline_cache_overview {
+        state.app_db.lock().await.set_offline_cache_overview(v)?;
+    }
+    if let Some(v) = req.offline_cache_recent {
+        state.app_db.lock().await.set_offline_cache_recent(v)?;
+    }
+    if let Some(n) = req.offline_recent_count {
+        if !(1..=200).contains(&n) {
+            return Err(ApiError::bad_request("offline_recent_count must be 1-200"));
+        }
+        state.app_db.lock().await.set_offline_recent_count(n)?;
     }
     Ok(Json(json!({ "ok": true })))
 }

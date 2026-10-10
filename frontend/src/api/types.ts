@@ -67,6 +67,9 @@ export interface Settings {
   accent: string | null;
   sync_interval_minutes: number;
   keep_articles_days: number | null;
+  offline_cache_overview: boolean;
+  offline_cache_recent: boolean;
+  offline_recent_count: number;
   stats: SettingsStats;
 }
 

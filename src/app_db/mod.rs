@@ -82,6 +82,36 @@ impl AppDb {
     pub fn set_sync_interval_minutes(&mut self, minutes: i64) -> anyhow::Result<()> {
         self.set_setting("sync_interval_minutes", &minutes.to_string())
     }
+    pub fn offline_cache_overview(&self) -> anyhow::Result<bool> {
+        Ok(self
+            .get_setting("offline_cache_overview")?
+            .as_deref()
+            .map(|s| s != "0" && s.to_lowercase() != "false")
+            .unwrap_or(true))
+    }
+    pub fn set_offline_cache_overview(&mut self, v: bool) -> anyhow::Result<()> {
+        self.set_setting("offline_cache_overview", if v { "1" } else { "0" })
+    }
+    pub fn offline_cache_recent(&self) -> anyhow::Result<bool> {
+        Ok(self
+            .get_setting("offline_cache_recent")?
+            .as_deref()
+            .map(|s| s == "1" || s.to_lowercase() == "true")
+            .unwrap_or(false))
+    }
+    pub fn set_offline_cache_recent(&mut self, v: bool) -> anyhow::Result<()> {
+        self.set_setting("offline_cache_recent", if v { "1" } else { "0" })
+    }
+    pub fn offline_recent_count(&self) -> anyhow::Result<i64> {
+        Ok(self
+            .get_setting("offline_recent_count")?
+            .and_then(|s| s.parse().ok())
+            .map(|n: i64| n.clamp(1, 200))
+            .unwrap_or(50))
+    }
+    pub fn set_offline_recent_count(&mut self, n: i64) -> anyhow::Result<()> {
+        self.set_setting("offline_recent_count", &n.clamp(1, 200).to_string())
+    }
 
     pub fn password_hash(&self) -> anyhow::Result<Option<String>> {
         self.get_setting("password_hash")
@@ -425,6 +455,22 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM saved_tags", [], |r| r.get(0))
             .unwrap();
         assert_eq!(tags, 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn offline_cache_settings_roundtrip_with_defaults() {
+        let dir = tmp_dir();
+        let mut db = open(&dir).unwrap();
+        assert_eq!(db.offline_cache_overview().unwrap(), true);
+        assert_eq!(db.offline_cache_recent().unwrap(), false);
+        assert_eq!(db.offline_recent_count().unwrap(), 50);
+        db.set_offline_cache_overview(false).unwrap();
+        db.set_offline_cache_recent(true).unwrap();
+        db.set_offline_recent_count(200).unwrap();
+        assert_eq!(db.offline_cache_overview().unwrap(), false);
+        assert_eq!(db.offline_cache_recent().unwrap(), true);
+        assert_eq!(db.offline_recent_count().unwrap(), 200);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -90,5 +90,8 @@ pub struct Settings {
     pub accent: Option<String>,
     pub sync_interval_minutes: i64,
     pub keep_articles_days: Option<i64>,
+    pub offline_cache_overview: bool,
+    pub offline_cache_recent: bool,
+    pub offline_recent_count: i64,
     pub stats: SettingsStats,
 }
