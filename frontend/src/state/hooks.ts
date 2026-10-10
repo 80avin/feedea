@@ -35,8 +35,12 @@ function articlesPath(params: ArticleQueryParams, offset: number, limit: number)
   return `/api/articles${serializeParams({ ...params, offset: String(offset), limit: String(limit) })}`;
 }
 
-export function useOverview() {
-  return useQuery({ queryKey: queryKeys.overview, queryFn: () => api.get<OverviewResponse>("/api/overview") });
+export function useOverview(unreadOnly = false) {
+  const query = unreadOnly ? "?unread_only=1" : "";
+  return useQuery({
+    queryKey: queryKeys.overviewWith(unreadOnly),
+    queryFn: () => api.get<OverviewResponse>(`/api/overview${query}`),
+  });
 }
 
 export function useFeeds() {

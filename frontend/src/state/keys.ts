@@ -2,6 +2,7 @@ import type { ArticleQueryParams } from "../api/types";
 
 export const queryKeys = {
   overview: ["overview"] as const,
+  overviewWith: (unreadOnly: boolean) => ["overview", { unreadOnly }] as const,
   feeds: ["feeds"] as const,
   sources: ["sources"] as const,
   articles: (params: ArticleQueryParams) => ["articles", params] as const,

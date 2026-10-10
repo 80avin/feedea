@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { ArrowRightIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
 import { encodeId } from "../api/client";
@@ -5,6 +6,19 @@ import { useOverview } from "../state/hooks";
 import type { Headline } from "../api/types";
 import ArticleListItem from "../components/ArticleListItem";
 import { ErrorState, LoadingState } from "../components/Feedback";
+
+type SortMode = "alpha" | "recent";
+const SORT_KEY = "feedea:overview-sort";
+const HIDE_KEY = "feedea:overview-hide-read";
+function loadSort(): SortMode {
+  return window.localStorage.getItem(SORT_KEY) === "recent" ? "recent" : "alpha";
+}
+function loadHide(): boolean {
+  return window.localStorage.getItem(HIDE_KEY) === "1";
+}
+function cardRecency(c: { items: { date: string }[] }): number {
+  return c.items.reduce((m, i) => Math.max(m, Date.parse(i.date) || 0), 0);
+}
 
 function Card({
   linkTo,
@@ -54,7 +68,8 @@ function Card({
               <ArticleListItem item={item} />
             </li>
           ))}
-          {items.length === 0 && <li className="py-4 text-sm text-app-text-faint">No articles yet.</li>}
+          {items.length === 0 && totalCount === 0 && <li className="py-4 text-sm text-app-text-faint">No articles yet.</li>}
+          {items.length === 0 && totalCount > 0 && <li className="py-4 text-sm text-app-text-faint">All caught up.</li>}
         </ul>
       )}
       {linkTo && (
@@ -85,13 +100,40 @@ function EmptyState() {
 }
 
 export default function Overview() {
-  const { data, isLoading, isError, error, refetch } = useOverview();
+  const [sort, setSort] = useState<SortMode>(loadSort);
+  const [hideRead, setHideRead] = useState(loadHide);
+  const { data, isLoading, isError, error, refetch } = useOverview(hideRead);
+  const cards = useMemo(() => {
+    const list = data?.cards ?? [];
+    if (sort === "recent") {
+      return [...list].sort((a, b) => cardRecency(b) - cardRecency(a) || a.name.localeCompare(b.name));
+    }
+    return list;
+  }, [data, sort]);
+
+  const changeSort = (m: SortMode) => { setSort(m); window.localStorage.setItem(SORT_KEY, m); };
+  const toggleHide = () => { setHideRead((v) => { window.localStorage.setItem(HIDE_KEY, v ? "0" : "1"); return !v; }); };
 
   return (
     <div className="flex h-full flex-col p-4">
       <div className="flex items-center gap-2">
         <Squares2X2Icon className="h-5 w-5 text-app-text-muted" />
         <h2 className="text-lg font-semibold">Overview</h2>
+      </div>
+      <div className="mt-3 flex items-center gap-2 text-xs">
+        <div className="flex overflow-hidden rounded-md border border-app-border" role="tablist" aria-label="Sort categories">
+          {(["alpha", "recent"] as const).map((m) => (
+            <button key={m} type="button" role="tab" aria-selected={sort === m}
+              onClick={() => changeSort(m)}
+              className={sort === m ? "bg-app-surface-2 px-2.5 py-1 font-semibold text-app-text" : "px-2.5 py-1 text-app-text-muted hover:text-app-text"}>
+              {m === "alpha" ? "A–Z" : "Recent"}
+            </button>
+          ))}
+        </div>
+        <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-app-text-muted">
+          <input type="checkbox" checked={hideRead} onChange={toggleHide} className="accent-[var(--accent)]" />
+          Hide read
+        </label>
       </div>
 
       {isLoading && <div className="mt-4"><LoadingState /></div>}
@@ -101,7 +143,7 @@ export default function Overview() {
           <EmptyState />
         ) : (
           <div className="mt-4 grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {data.cards.map((card) => (
+            {cards.map((card) => (
               <Card
                 key={card.category_id}
                 linkTo={`/feeds?category=${encodeId(card.category_id)}`}
