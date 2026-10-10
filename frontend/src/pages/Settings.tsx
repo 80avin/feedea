@@ -41,6 +41,9 @@ export default function Settings() {
   const [accent, setAccent] = useState("blue");
   const [syncInterval, setSyncInterval] = useState("30");
   const [keepDays, setKeepDays] = useState("");
+  const [cacheOverview, setCacheOverview] = useState(true);
+  const [cacheRecent, setCacheRecent] = useState(false);
+  const [recentCount, setRecentCount] = useState("50");
   const [savedBanner, setSavedBanner] = useState("");
   const [dirty, setDirty] = useState(false);
 
@@ -73,11 +76,14 @@ export default function Settings() {
       setAccent(data.accent ?? "blue");
       setSyncInterval(String(data.sync_interval_minutes));
       setKeepDays(data.keep_articles_days === null ? "" : String(data.keep_articles_days));
+      setCacheOverview(data.offline_cache_overview);
+      setCacheRecent(data.offline_cache_recent);
+      setRecentCount(String(data.offline_recent_count));
     }
   }, [data, dirty]);
 
   const savePreferences = async () => {
-    const patch: { theme?: string; accent?: string; sync_interval_minutes?: number; keep_articles_days?: number | null } = {};
+    const patch: { theme?: string; accent?: string; sync_interval_minutes?: number; keep_articles_days?: number | null; offline_cache_overview?: boolean; offline_cache_recent?: boolean; offline_recent_count?: number } = {};
     if (theme !== (data?.theme ?? "system")) {
       patch.theme = theme;
     }
@@ -95,6 +101,16 @@ export default function Settings() {
         return;
       }
       patch.keep_articles_days = parsedDays;
+    }
+    if (cacheOverview !== data?.offline_cache_overview) patch.offline_cache_overview = cacheOverview;
+    if (cacheRecent !== data?.offline_cache_recent) patch.offline_cache_recent = cacheRecent;
+    const parsedN = Number(recentCount);
+    if (parsedN !== data?.offline_recent_count) {
+      if (!Number.isInteger(parsedN) || parsedN < 1 || parsedN > 200) {
+        setSavedBanner("Recent count must be 1–200.");
+        return;
+      }
+      patch.offline_recent_count = parsedN;
     }
     if (Object.keys(patch).length === 0) {
       setSavedBanner("No changes to save.");
@@ -219,6 +235,22 @@ export default function Settings() {
               </Button>
               {savedBanner && <span className="text-sm text-app-text-muted">{savedBanner}</span>}
             </div>
+          </section>
+
+          <section className="flex flex-col gap-4 rounded-lg border border-app-border p-4">
+            <h3 className="text-sm font-semibold">Offline</h3>
+            <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-app-text-2">
+              Cache overview articles
+              <input type="checkbox" checked={cacheOverview} onChange={(e) => { setCacheOverview(e.target.checked); markDirty(); }} className="h-4 w-4 accent-[var(--accent)]" />
+            </label>
+            <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-app-text-2">
+              Cache recent articles
+              <input type="checkbox" checked={cacheRecent} onChange={(e) => { setCacheRecent(e.target.checked); markDirty(); }} className="h-4 w-4 accent-[var(--accent)]" />
+            </label>
+            <Field label="Recent articles to keep offline" hint="1–200. Applies when recent caching is on.">
+              <input type="number" min={1} max={200} disabled={!cacheRecent} value={recentCount}
+                onChange={(e) => { setRecentCount(e.target.value); markDirty(); }} className={inputClass} />
+            </Field>
           </section>
 
           <section className="flex flex-col gap-4 rounded-lg border border-app-border p-4">

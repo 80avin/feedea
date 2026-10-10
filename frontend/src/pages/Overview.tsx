@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { ArrowRightIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
 import { encodeId } from "../api/client";
+import { useOfflineWarmer } from "../pwa/useOfflineWarmer";
 import { useOverview } from "../state/hooks";
 import type { Headline } from "../api/types";
 import ArticleListItem from "../components/ArticleListItem";
@@ -110,6 +111,9 @@ export default function Overview() {
     }
     return list;
   }, [data, sort]);
+
+  const warmIds = useMemo(() => cards.flatMap((c) => c.items.map((i) => i.id)), [cards]);
+  useOfflineWarmer(warmIds);
 
   const changeSort = (m: SortMode) => { setSort(m); window.localStorage.setItem(SORT_KEY, m); };
   const toggleHide = () => { setHideRead((v) => { window.localStorage.setItem(HIDE_KEY, v ? "0" : "1"); return !v; }); };

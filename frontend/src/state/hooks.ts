@@ -341,6 +341,9 @@ export function useUpdateSettings() {
       accent?: string;
       sync_interval_minutes?: number;
       keep_articles_days?: number | null;
+      offline_cache_overview?: boolean;
+      offline_cache_recent?: boolean;
+      offline_recent_count?: number;
     }) => api.patch("/api/settings", patch),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
