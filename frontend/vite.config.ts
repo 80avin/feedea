@@ -31,6 +31,7 @@ export default defineConfig({
               url.origin === self.location.origin &&
               (url.pathname === "/api/overview" || url.pathname.startsWith("/api/articles")),
             handler: "NetworkFirst",
+            method: "GET",
             options: {
               cacheName: "feedea-api",
               networkTimeoutSeconds: 3,
@@ -45,6 +46,7 @@ export default defineConfig({
                 url.pathname.startsWith("/api/thumbnail") ||
                 url.pathname.startsWith("/api/favicon")),
             handler: "StaleWhileRevalidate",
+            method: "GET",
             options: {
               cacheName: "feedea-images",
               cacheableResponse: { statuses: [200] },

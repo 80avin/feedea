@@ -54,7 +54,7 @@ export function useSession() {
     } finally {
       try {
         const names = await caches.keys();
-        await Promise.all(names.filter((n) => n === "feedea-api").map((n) => caches.delete(n)));
+        await Promise.all(names.filter((n) => n === "feedea-api" || n === "feedea-images").map((n) => caches.delete(n)));
       } catch {
         // Cache API unavailable (private mode) — logout still proceeds.
       }

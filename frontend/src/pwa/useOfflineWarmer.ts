@@ -9,15 +9,18 @@ const MAX_WARM = 250;
 
 async function warmDetails(queryClient: ReturnType<typeof useQueryClient>, ids: string[]) {
   const limited = [...new Set(ids)].slice(0, MAX_WARM);
-  await Promise.allSettled(
-    limited.map((id) =>
-      queryClient.fetchQuery({
-        queryKey: queryKeys.article(id),
-        queryFn: () => api.get<ArticleDetail>(`/api/articles/${encodeId(id)}`),
-        staleTime: 5 * 60_000,
-      }),
-    ),
-  );
+  for (let i = 0; i < limited.length; i += 20) {
+    const chunk = limited.slice(i, i + 20);
+    await Promise.allSettled(
+      chunk.map((id) =>
+        queryClient.fetchQuery({
+          queryKey: queryKeys.article(id),
+          queryFn: () => api.get<ArticleDetail>(`/api/articles/${encodeId(id)}`),
+          staleTime: 5 * 60_000,
+        }),
+      ),
+    );
+  }
 }
 
 export function useOfflineWarmer(overviewIds: string[]) {
@@ -27,14 +30,16 @@ export function useOfflineWarmer(overviewIds: string[]) {
     if (!settings) return;
     (async () => {
       try {
-        if (settings.offline_cache_overview && overviewIds.length > 0) {
-          await warmDetails(queryClient, overviewIds);
+        const ov = settings.offline_cache_overview ? [...new Set(overviewIds)].slice(0, MAX_WARM) : [];
+        if (ov.length > 0) {
+          await warmDetails(queryClient, ov);
         }
         if (settings.offline_cache_recent) {
           const n = Math.min(Math.max(settings.offline_recent_count || 50, 1), 200);
           const recent = await api.get<Headline[]>(`/api/articles?limit=${n}`);
           const fresh = recent.map((h) => h.id).filter((id) => !overviewIds.includes(id));
-          if (fresh.length > 0) await warmDetails(queryClient, fresh);
+          const budgeted = fresh.slice(0, Math.max(0, MAX_WARM - ov.length));
+          if (budgeted.length > 0) await warmDetails(queryClient, budgeted);
         }
       } catch {
         // Offline or warming failure — never surface to UI.
