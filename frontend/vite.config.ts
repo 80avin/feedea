@@ -25,6 +25,33 @@ export default defineConfig({
       workbox: {
         navigateFallback: "/index.html",
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin &&
+              (url.pathname === "/api/overview" || url.pathname.startsWith("/api/articles")),
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "feedea-api",
+              networkTimeoutSeconds: 3,
+              cacheableResponse: { statuses: [200] },
+              expiration: { maxEntries: 300, maxAgeSeconds: 7 * 24 * 3600 },
+            },
+          },
+          {
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin &&
+              (url.pathname.startsWith("/img/") ||
+                url.pathname.startsWith("/api/thumbnail") ||
+                url.pathname.startsWith("/api/favicon")),
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "feedea-images",
+              cacheableResponse: { statuses: [200] },
+              expiration: { maxEntries: 300, maxAgeSeconds: 30 * 24 * 3600 },
+            },
+          },
+        ],
       },
     }),
   ],

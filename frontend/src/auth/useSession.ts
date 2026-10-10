@@ -52,6 +52,12 @@ export function useSession() {
     try {
       await api.post("/api/logout");
     } finally {
+      try {
+        const names = await caches.keys();
+        await Promise.all(names.filter((n) => n === "feedea-api").map((n) => caches.delete(n)));
+      } catch {
+        // Cache API unavailable (private mode) — logout still proceeds.
+      }
       queryClient.setQueryData(SESSION_QUERY_KEY, {
         authenticated: false,
         version: "",
