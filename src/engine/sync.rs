@@ -19,12 +19,29 @@ async fn read_interval(app_db: &Arc<Mutex<AppDb>>, default_interval: Duration) -
 
 pub async fn scheduler_loop(engine: Engine, app_db: Arc<Mutex<AppDb>>, default_interval: Duration) {
     loop {
-        if let Err(error) = engine.sync_all().await {
-            tracing::warn!(%error, "scheduled sync failed");
+        let started = std::time::Instant::now();
+        match engine.sync_all().await {
+            Ok(counts) => {
+                let (feeds, new_articles) = summarize_sync_counts(&counts);
+                tracing::info!(
+                    feeds,
+                    new_articles,
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "scheduled sync completed",
+                );
+            }
+            Err(error) => {
+                tracing::warn!(%error, "scheduled sync failed");
+            }
         }
         let interval = read_interval(&app_db, default_interval).await;
         tokio::time::sleep(interval).await;
     }
+}
+
+/// Summarize per-feed new-article counts into `(feeds_synced, new_articles)`.
+fn summarize_sync_counts(counts: &std::collections::HashMap<String, i64>) -> (usize, i64) {
+    (counts.len(), counts.values().sum())
 }
 
 #[cfg(test)]
@@ -42,6 +59,15 @@ mod tests {
             DEFAULT_SYNC_INTERVAL,
             std::time::Duration::from_secs(30 * 60)
         );
+    }
+
+    #[test]
+    fn sync_summary_totals_new_articles_across_feeds() {
+        use std::collections::HashMap;
+        let counts: HashMap<String, i64> =
+            [("feed-a".to_string(), 3), ("feed-b".to_string(), 0)].into();
+        assert_eq!(summarize_sync_counts(&counts), (2, 3));
+        assert_eq!(summarize_sync_counts(&HashMap::new()), (0, 0));
     }
 
     #[tokio::test]
