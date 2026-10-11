@@ -22,6 +22,11 @@ pub mod opml_import;
 pub mod queries;
 pub mod sync;
 
+/// Timestamps further than this beyond now are treated as publisher errors
+/// (e.g. an item dated 9999-12-31) and clamped back to the present after
+/// ingestion. The allowance covers scheduled posts and clock skew.
+const MAX_FUTURE_ARTICLE_SKEW: chrono::Duration = chrono::Duration::hours(48);
+
 #[derive(Clone)]
 pub struct Engine {
     nf: Arc<NewsFlash>,
@@ -117,6 +122,7 @@ impl Engine {
         {
             tracing::warn!(%error, "initial sync of new feed failed");
         }
+        self.clamp_future_article_dates().await?;
         Ok(FeedSummary {
             id: feed.feed_id.as_str().to_string(),
             title: feed.label,
@@ -134,6 +140,7 @@ impl Engine {
         let _guard = self.mutation_guard().await;
         let header: FeedHeaderMap = HashMap::new();
         let counts = self.nf.sync(&self.client, header).await?;
+        self.clamp_future_article_dates().await?;
         Ok(counts
             .into_iter()
             .map(|(k, v)| (k.as_str().to_string(), v))
@@ -143,10 +150,55 @@ impl Engine {
     pub async fn fetch_feed(&self, feed_id: &str) -> anyhow::Result<i64> {
         let _guard = self.mutation_guard().await;
         let feed_id = FeedID::new(feed_id);
-        Ok(self
+        let count = self
             .nf
             .fetch_feed(&feed_id, &self.client, reqwest::header::HeaderMap::new())
-            .await?)
+            .await?;
+        self.clamp_future_article_dates().await?;
+        Ok(count)
+    }
+
+    /// Clamp absurd far-future article timestamps back to the present.
+    ///
+    /// Publisher feeds occasionally carry dates like 9999-12-31 (placeholder /
+    /// pinned items). news-flash stores them verbatim, and with NewestFirst
+    /// ordering such a row permanently pins the top of every list, making sync
+    /// look frozen. Runs after each ingestion and repairs pre-existing rows too.
+    /// DELIBERATE PINNED-SCHEMA BYPASS: rewrites `articles.date` / `updated`
+    /// directly because news-flash exposes no API to sanitize stored dates. It
+    /// pins upstream's private schema; an upstream migration may break it. No
+    /// upstream change is planned; keep the table/column names in sync with
+    /// news-flash 3.2.0.
+    async fn clamp_future_article_dates(&self) -> anyhow::Result<()> {
+        let db_path = self.data_dir.join("engine/data/database.sqlite");
+        let fixed = tokio::task::spawn_blocking(move || {
+            let conn = rusqlite::Connection::open(&db_path)?;
+            conn.busy_timeout(std::time::Duration::from_secs(10))?;
+            let now = chrono::Utc::now();
+            // Diesel writes TimestamptzSqlite as zero-padded `%F %T%.f%:z` TEXT in
+            // UTC, so lexicographic comparison is chronological.
+            let cap = (now + MAX_FUTURE_ARTICLE_SKEW)
+                .format("%F %T%.f%:z")
+                .to_string();
+            let present = now.format("%F %T%.f%:z").to_string();
+            let date_fixed = conn.execute(
+                "UPDATE articles SET date = ?1 WHERE date > ?2",
+                rusqlite::params![present, cap],
+            )?;
+            let updated_fixed = conn.execute(
+                "UPDATE articles SET updated = ?1 WHERE updated > ?2",
+                rusqlite::params![present, cap],
+            )?;
+            Ok::<usize, anyhow::Error>(date_fixed + updated_fixed)
+        })
+        .await??;
+        if fixed > 0 {
+            tracing::warn!(
+                fixed,
+                "clamped far-future article dates back to the present"
+            );
+        }
+        Ok(())
     }
 
     pub async fn discover(&self, url: &str) -> anyhow::Result<Discovered> {
@@ -932,6 +984,71 @@ pub mod tests {
             .unwrap();
         assert_eq!(rows.len(), 1, "feed ends up in exactly one category");
         assert_eq!(rows[0].1, cat2);
+        server.stop();
+    }
+
+    #[tokio::test]
+    async fn far_future_article_dates_are_clamped_after_sync() {
+        const RSS_FUTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Future Feed</title>
+    <link>http://127.0.0.1/</link>
+    <description>test</description>
+    <item>
+      <title>Normal Article</title>
+      <link>http://example.com/normal</link>
+      <guid isPermaLink="false">normal-1</guid>
+      <pubDate>Mon, 11 Aug 2026 10:00:00 GMT</pubDate>
+      <description>Normal body.</description>
+    </item>
+    <item>
+      <title>Pinned Far Future Article</title>
+      <link>http://example.com/future</link>
+      <guid isPermaLink="false">future-1</guid>
+      <pubDate>Fri, 31 Dec 9999 23:59:59 GMT</pubDate>
+      <description>Future body.</description>
+    </item>
+  </channel>
+</rss>
+"#;
+        let server = crate::engine::tests::FeedServer::start(RSS_FUTURE.to_string(), 6);
+        let config = Config {
+            data_dir: tmp_dir(),
+            host: "127.0.0.1".into(),
+            port: 0,
+            allow_private_proxy: false,
+            memory_trim_minutes: crate::memtrim::DEFAULT_TRIM_MINUTES,
+            memory_arena_max: crate::memtrim::DEFAULT_ARENA_MAX,
+        };
+        let engine = Engine::new(&config).await.unwrap();
+        engine
+            .add_feed(&server.url, Some("Future Feed".into()), None)
+            .await
+            .unwrap();
+        engine.sync_all().await.unwrap();
+
+        let filter = news_flash::models::ArticleFilter {
+            order: Some(news_flash::models::ArticleOrder::NewestFirst),
+            order_by: Some(news_flash::models::OrderBy::Published),
+            ..news_flash::models::ArticleFilter::default()
+        };
+        let headlines = engine.get_headlines(filter).await.unwrap();
+        assert_eq!(headlines.len(), 2);
+        let cap = chrono::Utc::now() + chrono::Duration::hours(48);
+        for headline in &headlines {
+            assert!(
+                headline.date <= cap,
+                "article '{}' has far-future date {}",
+                headline.title.as_deref().unwrap_or("?"),
+                headline.date,
+            );
+        }
+        let normal = headlines
+            .iter()
+            .find(|h| h.title.as_deref() == Some("Normal Article"))
+            .expect("normal article present");
+        assert_eq!(normal.date.format("%Y").to_string(), "2026");
         server.stop();
     }
 }
