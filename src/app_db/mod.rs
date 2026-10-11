@@ -462,14 +462,14 @@ mod tests {
     fn offline_cache_settings_roundtrip_with_defaults() {
         let dir = tmp_dir();
         let mut db = open(&dir).unwrap();
-        assert_eq!(db.offline_cache_overview().unwrap(), true);
-        assert_eq!(db.offline_cache_recent().unwrap(), false);
+        assert!(db.offline_cache_overview().unwrap());
+        assert!(!db.offline_cache_recent().unwrap());
         assert_eq!(db.offline_recent_count().unwrap(), 50);
         db.set_offline_cache_overview(false).unwrap();
         db.set_offline_cache_recent(true).unwrap();
         db.set_offline_recent_count(200).unwrap();
-        assert_eq!(db.offline_cache_overview().unwrap(), false);
-        assert_eq!(db.offline_cache_recent().unwrap(), true);
+        assert!(!db.offline_cache_overview().unwrap());
+        assert!(db.offline_cache_recent().unwrap());
         assert_eq!(db.offline_recent_count().unwrap(), 200);
         let _ = std::fs::remove_dir_all(&dir);
     }
