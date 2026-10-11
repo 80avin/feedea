@@ -9,7 +9,7 @@ export default function MobileLayout() {
 
   return (
     <div className="flex h-dvh flex-col lg:hidden">
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      <main className="min-h-0 flex-1 overflow-y-auto" data-scroll-root>
         {isReader ? <ReaderPanel /> : <Outlet />}
       </main>
       {!isReader && <BottomNav />}

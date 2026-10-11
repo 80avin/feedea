@@ -1,11 +1,13 @@
 import { useSession } from "../auth/useSession";
 import DesktopLayout from "../layout/DesktopLayout";
 import MobileLayout from "../layout/MobileLayout";
+import { useSaveScrollRoot } from "../hooks/useScrollRestore";
 import { ErrorState } from "./Feedback";
 import UpdateBanner from "./UpdateBanner";
 
 export default function Shell() {
   const { session, loading, isError, error, retry } = useSession();
+  useSaveScrollRoot();
 
   if (isError) {
     return (

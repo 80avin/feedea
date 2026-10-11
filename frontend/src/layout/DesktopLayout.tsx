@@ -18,7 +18,7 @@ export default function DesktopLayout() {
       )}
     >
       <Sidebar />
-      <main className={clsx("min-h-0 overflow-y-auto", showReader && "border-r border-app-border")}>
+      <main className={clsx("min-h-0 overflow-y-auto", showReader && "border-r border-app-border")} data-scroll-root>
         <Outlet />
       </main>
       {showReader && (

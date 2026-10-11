@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, apiGetText, encodeId } from "../api/client";
 import type {
   ArticleDetail,
@@ -40,6 +40,7 @@ export function useOverview(unreadOnly = false) {
   return useQuery({
     queryKey: queryKeys.overviewWith(unreadOnly),
     queryFn: () => api.get<OverviewResponse>(`/api/overview${query}`),
+    placeholderData: keepPreviousData,
   });
 }
 

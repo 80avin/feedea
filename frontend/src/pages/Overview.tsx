@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { ArrowRightIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
 import { encodeId } from "../api/client";
 import { useOfflineWarmer } from "../pwa/useOfflineWarmer";
+import { useRestoreScrollRoot } from "../hooks/useScrollRestore";
 import { useOverview } from "../state/hooks";
 import type { Headline } from "../api/types";
 import ArticleListItem from "../components/ArticleListItem";
@@ -103,7 +104,8 @@ function EmptyState() {
 export default function Overview() {
   const [sort, setSort] = useState<SortMode>(loadSort);
   const [hideRead, setHideRead] = useState(loadHide);
-  const { data, isLoading, isError, error, refetch } = useOverview(hideRead);
+  const { data, isLoading, isError, error, refetch, isFetching } = useOverview(hideRead);
+  useRestoreScrollRoot(!isFetching);
   const cards = useMemo(() => {
     const list = data?.cards ?? [];
     if (sort === "recent") {
