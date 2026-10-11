@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { PlusIcon, RssIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useArticles, useCategories, useSources } from "../state/hooks";
-import type { CategoryNode } from "../api/types";
+import { useArticles, useArticle, useCategories, useSources } from "../state/hooks";
+import type { ArticleDetail, CategoryNode, Headline } from "../api/types";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
+import { useSelectedArticleId } from "../hooks/useSelectedArticleId";
 import SearchBar from "../components/SearchBar";
 import TimelinePanel from "../components/TimelinePanel";
 import AddCategoryDialog from "../components/AddCategoryDialog";
@@ -23,6 +24,15 @@ export default function Feeds() {
   const { data, isLoading, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useArticles(params);
   const articles = data?.pages.flatMap((page) => page) ?? [];
+  const selectedId = useSelectedArticleId();
+  const isSelectedInList = !selectedId || articles.some((a) => a.id === selectedId);
+  const { data: selectedDetail } = useArticle(!isSelectedInList && selectedId ? selectedId : "");
+  const displayArticles = useMemo(() => {
+    if (selectedDetail && selectedId && !articles.some((a) => a.id === selectedId)) {
+      return [detailToHeadline(selectedDetail), ...articles];
+    }
+    return articles;
+  }, [articles, selectedDetail, selectedId]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [addCategoryOpen, setAddCategoryOpen] = useState(false);
   const sentinel = useInfiniteScroll(
@@ -93,12 +103,27 @@ export default function Feeds() {
             <ErrorState error={error} onRetry={() => refetch()} />
           </div>
         )}
-        {data && <TimelinePanel articles={articles} bottomRef={sentinel} />}
+        {data && <TimelinePanel articles={displayArticles} bottomRef={sentinel} selectedId={selectedId} />}
       </div>
 
       <AddCategoryDialog open={addCategoryOpen} onClose={() => setAddCategoryOpen(false)} />
     </div>
   );
+}
+
+function detailToHeadline(detail: ArticleDetail): Headline {
+  return {
+    id: detail.id,
+    title: detail.title,
+    feed_id: detail.feed_id,
+    feed_title: detail.feed_title,
+    url: detail.url,
+    date: detail.date,
+    summary: detail.summary,
+    thumbnail_url: detail.thumbnail_url,
+    unread: detail.unread,
+    marked: detail.marked,
+  };
 }
 
 function useFilterChips() {

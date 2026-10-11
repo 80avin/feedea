@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import clsx from "clsx";
 import type { Headline } from "../api/types";
 import { encodeId } from "../api/client";
 import { formatAge } from "../utils/format";
@@ -9,11 +10,18 @@ import { useContextMenu } from "../hooks/useContextMenu";
 import { useArticlePath } from "../hooks/useArticlePath";
 import FeedNameLink from "./FeedNameLink";
 
-function TimelineItem({ item }: { item: Headline }) {
+function TimelineItem({ item, active }: { item: Headline; active: boolean }) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const { position, close, menuRef, triggerProps } = useContextMenu();
   const articlePathFn = useArticlePath();
   const navigate = useNavigate();
+  const itemRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (active) {
+      itemRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [active]);
 
   const openArticle = () => navigate(articlePathFn(item.id));
   const openArticleNewTab = (e: React.MouseEvent) => {
@@ -32,9 +40,14 @@ function TimelineItem({ item }: { item: Headline }) {
   return (
     <>
       <div
+        ref={itemRef}
         role="link"
         tabIndex={0}
-        className="block cursor-pointer px-4 py-2 hover:bg-app-surface/60"
+        aria-current={active ? "true" : undefined}
+        className={clsx(
+          "block cursor-pointer px-4 py-2 hover:bg-app-surface/60",
+          active && "border-l-2 border-accent bg-accent-soft",
+        )}
         {...triggerProps}
         onClick={(e) => {
           if (triggerProps.onClick) triggerProps.onClick(e);
@@ -84,16 +97,18 @@ function TimelineItem({ item }: { item: Headline }) {
 export default function TimelinePanel({
   articles,
   bottomRef,
+  selectedId,
 }: {
   articles: Headline[];
   bottomRef?: (node: Element | null) => void;
+  selectedId?: string | null;
 }) {
   return (
     <div className="flex h-full flex-col">
       <ul className="divide-y divide-app-border/60">
         {articles.map((item) => (
           <li key={item.id}>
-            <TimelineItem item={item} />
+            <TimelineItem item={item} active={selectedId === item.id} />
           </li>
         ))}
         {articles.length === 0 && <li className="py-8 text-center text-sm text-app-text-faint">No articles.</li>}
