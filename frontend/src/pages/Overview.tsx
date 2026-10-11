@@ -4,6 +4,7 @@ import { ArrowRightIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
 import { encodeId } from "../api/client";
 import { useOfflineWarmer } from "../pwa/useOfflineWarmer";
 import { useRestoreScrollRoot } from "../hooks/useScrollRestore";
+import { useSelectedArticleId } from "../hooks/useSelectedArticleId";
 import { useOverview } from "../state/hooks";
 import type { Headline } from "../api/types";
 import ArticleListItem from "../components/ArticleListItem";
@@ -39,6 +40,7 @@ function Card({
   moreLabel?: string;
   showStats?: boolean;
 }) {
+  const selectedId = useSelectedArticleId();
   return (
     <section className="flex flex-col overflow-hidden rounded-lg border border-app-border">
       <header className="flex items-center justify-between gap-2 border-b border-app-border px-3 py-2">
@@ -67,7 +69,7 @@ function Card({
         <ul className="flex-1 divide-y divide-app-border/60 px-3 py-1">
           {items.map((item) => (
             <li key={item.id}>
-              <ArticleListItem item={item} />
+              <ArticleListItem item={item} active={selectedId === item.id} />
             </li>
           ))}
           {items.length === 0 && totalCount === 0 && <li className="py-4 text-sm text-app-text-faint">No articles yet.</li>}

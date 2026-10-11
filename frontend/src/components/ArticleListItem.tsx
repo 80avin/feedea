@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import clsx from "clsx";
 import { encodeId } from "../api/client";
 import type { Headline } from "../api/types";
 import ArticleContextMenu from "./ArticleContextMenu";
@@ -12,7 +13,7 @@ function formatDate(iso: string): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export default function ArticleListItem({ item, hideFeed }: { item: Headline; hideFeed?: boolean }) {
+export default function ArticleListItem({ item, hideFeed, active }: { item: Headline; hideFeed?: boolean; active?: boolean }) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const { position, close, menuRef, triggerProps } = useContextMenu();
   const articlePathFn = useArticlePath();
@@ -37,7 +38,11 @@ export default function ArticleListItem({ item, hideFeed }: { item: Headline; hi
       <div
         role="link"
         tabIndex={0}
-        className="block cursor-pointer hover:bg-app-surface/60"
+        aria-current={active ? "true" : undefined}
+        className={clsx(
+          "block cursor-pointer hover:bg-app-surface/60",
+          active && "border-l-2 border-accent bg-accent-soft",
+        )}
         {...triggerProps}
         onClick={(e) => {
           if (triggerProps.onClick) triggerProps.onClick(e);
