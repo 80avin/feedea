@@ -1,15 +1,12 @@
-use argon2::Argon2;
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::{PasswordHasher, PasswordVerifier};
+use argon2::{Argon2, PasswordHash};
 use rand::RngExt;
 
 use crate::AppState;
 
 pub fn hash_password(password: &str) -> anyhow::Result<String> {
-    let mut salt_bytes = [0u8; 16];
-    rand::rng().fill(&mut salt_bytes);
-    let salt = SaltString::encode_b64(&salt_bytes).map_err(anyhow::Error::from)?;
     let hash = Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map_err(anyhow::Error::from)?
         .to_string();
     Ok(hash)

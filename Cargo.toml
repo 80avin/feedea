@@ -18,7 +18,7 @@ diesel = "2"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 chrono = "0.4"
-argon2 = { version = "0.5.3", features = ["std"] }
+argon2 = { version = "0.6.0" }
 rand = "0.10.2"
 sha2 = "0.11.0"
 scraper = "0.27.0"

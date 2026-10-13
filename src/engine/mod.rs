@@ -137,24 +137,158 @@ impl Engine {
     }
 
     pub async fn sync_all(&self) -> anyhow::Result<HashMap<String, i64>> {
+        let total_started = std::time::Instant::now();
+        let lock_started = std::time::Instant::now();
         let _guard = self.mutation_guard().await;
+        let lock_wait_ms = lock_started.elapsed().as_millis();
         let header: FeedHeaderMap = HashMap::new();
-        let counts = self.nf.sync(&self.client, header).await?;
+        let sync_started = std::time::Instant::now();
+        let counts = match self.nf.sync(&self.client, header).await {
+            Ok(counts) => counts,
+            Err(error) => {
+                tracing::warn!(
+                    lock_wait_ms,
+                    nf_sync_ms = sync_started.elapsed().as_millis(),
+                    total_ms = total_started.elapsed().as_millis(),
+                    %error,
+                    "sync_all failed in news-flash sync stage",
+                );
+                return Err(error.into());
+            }
+        };
+        let nf_sync_ms = sync_started.elapsed().as_millis();
+        let clamp_started = std::time::Instant::now();
         self.clamp_future_article_dates().await?;
-        Ok(counts
+        let clamp_ms = clamp_started.elapsed().as_millis();
+        let mapped: HashMap<String, i64> = counts
             .into_iter()
             .map(|(k, v)| (k.as_str().to_string(), v))
-            .collect())
+            .collect();
+        let feeds_synced = mapped.len();
+        let new_articles: i64 = mapped.values().sum();
+        let stagger_ms = Self::estimated_upstream_stagger_ms(mapped.keys());
+        tracing::info!(
+            feeds_synced,
+            new_articles,
+            lock_wait_ms,
+            nf_sync_ms,
+            clamp_ms,
+            stagger_ms,
+            total_ms = total_started.elapsed().as_millis(),
+            "sync_all stage breakdown",
+        );
+        if std::env::var("RSSEA_MEASURE_FEEDS").is_ok() {
+            self.log_per_feed_latency(mapped.keys()).await;
+        }
+        Ok(mapped)
+    }
+
+    /// Estimate the minimum start-delay news-flash's local backend injects
+    /// before the last feed even starts downloading: `index * 100ms` plus
+    /// `1500ms` per extra feed on the same host. Computed from feed ids
+    /// (urls) so the stagger theory has a number without patching upstream.
+    fn estimated_upstream_stagger_ms<'a>(ids: impl Iterator<Item = &'a String>) -> u128 {
+        use std::collections::HashMap;
+        let mut hosts: HashMap<String, u64> = HashMap::new();
+        let mut count = 0usize;
+        let mut max_extra_same_host = 0u64;
+        for id in ids {
+            count += 1;
+            if let Ok(url) = url::Url::parse(id) {
+                if let Some(host) = url.host_str() {
+                    let entry = hosts.entry(host.to_string()).or_insert(0);
+                    *entry += 1;
+                    if *entry > 1 {
+                        let extra = (*entry - 1) * 1500;
+                        max_extra_same_host = max_extra_same_host.max(extra);
+                    }
+                }
+            }
+        }
+        if count == 0 {
+            return 0;
+        }
+        (count as u128 - 1) * 100 + max_extra_same_host as u128
+    }
+
+    /// Dry-run HTTP probe: GET each feed url concurrently with a timeout and
+    /// log per-url latency. Read-only (no DB writes); only runs when
+    /// `RSSEA_MEASURE_FEEDS` is set, so normal syncs pay no extra traffic.
+    async fn log_per_feed_latency<'a>(&self, ids: impl Iterator<Item = &'a String>) {
+        let urls: Vec<String> = ids.map(|s| s.clone()).collect();
+        if urls.is_empty() {
+            return;
+        }
+        let client = self.client.clone();
+        let started = std::time::Instant::now();
+        let tasks: Vec<_> = urls
+            .into_iter()
+            .map(|url| {
+                let client = client.clone();
+                tokio::spawn(async move {
+                    let t = std::time::Instant::now();
+                    let outcome = tokio::time::timeout(
+                        std::time::Duration::from_secs(15),
+                        client.get(&url).send(),
+                    )
+                    .await;
+                    let elapsed_ms = t.elapsed().as_millis();
+                    let status = match outcome {
+                        Err(_) => "timeout_15s".to_string(),
+                        Ok(Err(e)) => format!("req_err:{e}"),
+                        Ok(Ok(r)) => format!("http:{}", r.status()),
+                    };
+                    (url, elapsed_ms, status)
+                })
+            })
+            .collect();
+        let mut rows = Vec::new();
+        for handle in tasks {
+            match handle.await {
+                Ok(row) => rows.push(row),
+                Err(e) => rows.push((format!("<join_err:{e}>"), 0, "join_err".to_string())),
+            }
+        }
+        rows.sort_by(|a, b| b.1.cmp(&a.1));
+        let total_ms = started.elapsed().as_millis();
+        let slowest: Vec<String> = rows
+            .iter()
+            .take(10)
+            .map(|(u, ms, s)| format!("{ms}ms {s} {u}"))
+            .collect();
+        tracing::info!(
+            feeds_probed = rows.len(),
+            total_ms,
+            slowest = slowest.join(" | "),
+            "per-feed latency probe (slowest 10)",
+        );
+        for (url, ms, status) in rows.iter().skip(10) {
+            tracing::debug!(elapsed_ms = ms, status = status.as_str(), url = url.as_str(), "feed latency");
+        }
     }
 
     pub async fn fetch_feed(&self, feed_id: &str) -> anyhow::Result<i64> {
+        let total_started = std::time::Instant::now();
+        let lock_started = std::time::Instant::now();
         let _guard = self.mutation_guard().await;
+        let lock_wait_ms = lock_started.elapsed().as_millis();
         let feed_id = FeedID::new(feed_id);
+        let sync_started = std::time::Instant::now();
         let count = self
             .nf
             .fetch_feed(&feed_id, &self.client, reqwest::header::HeaderMap::new())
             .await?;
+        let nf_sync_ms = sync_started.elapsed().as_millis();
+        let clamp_started = std::time::Instant::now();
         self.clamp_future_article_dates().await?;
+        tracing::info!(
+            lock_wait_ms,
+            nf_sync_ms,
+            clamp_ms = clamp_started.elapsed().as_millis(),
+            total_ms = total_started.elapsed().as_millis(),
+            new_articles = count,
+            "fetch_feed stage breakdown"
+        );
         Ok(count)
     }
 
@@ -170,6 +304,7 @@ impl Engine {
     /// upstream change is planned; keep the table/column names in sync with
     /// news-flash 3.2.0.
     async fn clamp_future_article_dates(&self) -> anyhow::Result<()> {
+        let started = std::time::Instant::now();
         let db_path = self.data_dir.join("engine/data/database.sqlite");
         let fixed = tokio::task::spawn_blocking(move || {
             let conn = rusqlite::Connection::open(&db_path)?;
@@ -192,11 +327,15 @@ impl Engine {
             Ok::<usize, anyhow::Error>(date_fixed + updated_fixed)
         })
         .await??;
+        let clamp_ms = started.elapsed().as_millis();
         if fixed > 0 {
             tracing::warn!(
                 fixed,
+                clamp_ms,
                 "clamped far-future article dates back to the present"
             );
+        } else {
+            tracing::debug!(clamp_ms, "clamp_future_article_dates: nothing to fix");
         }
         Ok(())
     }
