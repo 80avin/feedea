@@ -57,6 +57,12 @@ impl From<anyhow::Error> for ApiError {
     }
 }
 
+impl From<news_flash::error::NewsFlashError> for ApiError {
+    fn from(e: news_flash::error::NewsFlashError) -> Self {
+        newsflash_to_api(&e)
+    }
+}
+
 fn newsflash_to_api(e: &news_flash::error::NewsFlashError) -> ApiError {
     use news_flash::error::NewsFlashError;
     match e {
@@ -73,7 +79,7 @@ fn newsflash_to_api(e: &news_flash::error::NewsFlashError) -> ApiError {
         NewsFlashError::Database(err) => {
             if matches!(
                 err,
-                news_flash::error::DatabaseError::Query(diesel::result::Error::NotFound)
+                news_flash::error::DatabaseError::Sqlx(sqlx::Error::RowNotFound)
             ) {
                 ApiError {
                     status: StatusCode::NOT_FOUND,

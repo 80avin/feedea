@@ -33,8 +33,8 @@ pub async fn list(
         return Ok(Json(state.engine.search(&q, limit).await?));
     }
     let mut filter = ArticleFilter {
-        order: Some(ArticleOrder::NewestFirst),
-        order_by: Some(OrderBy::Published),
+        order: ArticleOrder::NewestFirst,
+        order_by: OrderBy::Published,
         limit: Some(limit),
         offset: Some(params.offset.unwrap_or(0).max(0)),
         ..ArticleFilter::default()

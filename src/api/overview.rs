@@ -13,8 +13,8 @@ const MAX_OVERVIEW_ITEMS: i64 = 6;
 
 pub fn card_article_filter(feed_ids: Vec<FeedID>, unread_only: bool) -> ArticleFilter {
     ArticleFilter {
-        order: Some(ArticleOrder::NewestFirst),
-        order_by: Some(OrderBy::Published),
+        order: ArticleOrder::NewestFirst,
+        order_by: OrderBy::Published,
         limit: Some(MAX_OVERVIEW_ITEMS),
         feeds: Some(feed_ids),
         unread: unread_only.then_some(Read::Unread),
@@ -86,7 +86,7 @@ pub async fn overview(
         let feed_ids = feed_ids.clone();
         tasks.spawn(async move {
             let filter = card_article_filter(feed_ids, unread_only);
-            let result = engine.with_nf(move |nf| nf.get_fat_articles(filter)).await;
+            let result = engine.nf().get_fat_articles(filter).await;
             (id, result)
         });
     }
@@ -117,7 +117,7 @@ pub async fn overview(
             .await
             .map_err(anyhow::Error::from)??
     };
-    let all_unread = state.engine.with_nf(|nf| nf.unread_count_all()).await?;
+    let all_unread = state.engine.nf().unread_count_all().await?;
 
     Ok(Json(json!({
         "cards": cards,

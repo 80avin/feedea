@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use crate::engine::category_index::{CategoryIndex, IndexInputs, TOPLEVEL};
 use news_flash::NewsFlash;
-use news_flash::error::NewsFlashError;
 use news_flash::feed_api::FeedHeaderMap;
 use news_flash::models::{ArticleFilter, CategoryID, FeedID, Marked, PluginID, Read, Url};
 
@@ -41,15 +40,13 @@ impl Engine {
         let engine_dir = config.data_dir.join("engine");
         let config_dir = engine_dir.join("config");
         let data_dir = engine_dir.join("data");
-        let nf = tokio::task::spawn_blocking(move || {
-            NewsFlash::builder()
-                .plugin(PluginID::new("local_rss"))
-                .config_dir(&config_dir)
-                .data_dir(&data_dir)
-                .create()
-                .map_err(anyhow::Error::from)
-        })
-        .await??;
+        // news-flash 4 opens its database asynchronously; the builder is no longer blocking.
+        let nf = NewsFlash::builder()
+            .plugin(PluginID::new("local_rss"))
+            .config_dir(&config_dir)
+            .data_dir(&data_dir)
+            .create()
+            .await?;
         Ok(Engine {
             nf: Arc::new(nf),
             client: reqwest::Client::new(),
@@ -62,15 +59,11 @@ impl Engine {
         &self.data_dir
     }
 
-    pub async fn with_nf<T, F>(&self, f: F) -> anyhow::Result<T>
-    where
-        T: Send + 'static,
-        F: FnOnce(&NewsFlash) -> Result<T, NewsFlashError> + Send + 'static,
-    {
-        let nf = self.nf.clone();
-        tokio::task::spawn_blocking(move || f(&nf))
-            .await?
-            .map_err(anyhow::Error::from)
+    /// The underlying news-flash client. Reads are async in news-flash 4, so
+    /// callers await the method directly instead of handing a closure to a
+    /// blocking thread.
+    pub fn nf(&self) -> &NewsFlash {
+        &self.nf
     }
 
     pub fn client(&self) -> &reqwest::Client {
@@ -97,7 +90,7 @@ impl Engine {
     }
 
     pub async fn database_size_bytes(&self) -> anyhow::Result<u64> {
-        let size = self.with_nf(|nf| nf.database_size()).await?;
+        let size = self.nf.database_size().await?;
         Ok(size.on_disk)
     }
 
@@ -126,9 +119,9 @@ impl Engine {
         Ok(FeedSummary {
             id: feed.feed_id.as_str().to_string(),
             title: feed.label,
-            website: feed.website.map(|u| u.to_string()),
-            feed_url: feed.feed_url.map(|u| u.to_string()),
-            icon_url: feed.icon_url.map(|u| u.to_string()),
+            website: feed.website,
+            feed_url: feed.feed_url,
+            icon_url: feed.icon_url,
             category_id: feed_mapping.category_id.as_str().to_string(),
             unread_count: 0,
             error_count: feed.error_count,
@@ -160,10 +153,17 @@ impl Engine {
         let clamp_started = std::time::Instant::now();
         self.clamp_future_article_dates().await?;
         let clamp_ms = clamp_started.elapsed().as_millis();
-        let mapped: HashMap<String, i64> = counts
+        // news-flash 4 returns only the feeds that produced new articles.
+        // Seed the map with every subscription at 0 so the API keeps the
+        // pre-4.0 shape (one entry per feed) and `feeds_synced` stays truthful.
+        let (feeds, _) = self.nf.get_feeds().await?;
+        let mut mapped: HashMap<String, i64> = feeds
             .into_iter()
-            .map(|(k, v)| (k.as_str().to_string(), v))
+            .map(|feed| (feed.feed_id.as_str().to_string(), 0))
             .collect();
+        for (feed_id, ids) in counts {
+            mapped.insert(feed_id.as_str().to_string(), ids.len() as i64);
+        }
         let feeds_synced = mapped.len();
         let new_articles: i64 = mapped.values().sum();
         let stagger_ms = Self::estimated_upstream_stagger_ms(mapped.keys());
@@ -194,14 +194,14 @@ impl Engine {
         let mut max_extra_same_host = 0u64;
         for id in ids {
             count += 1;
-            if let Ok(url) = url::Url::parse(id) {
-                if let Some(host) = url.host_str() {
-                    let entry = hosts.entry(host.to_string()).or_insert(0);
-                    *entry += 1;
-                    if *entry > 1 {
-                        let extra = (*entry - 1) * 1500;
-                        max_extra_same_host = max_extra_same_host.max(extra);
-                    }
+            if let Ok(url) = url::Url::parse(id)
+                && let Some(host) = url.host_str()
+            {
+                let entry = hosts.entry(host.to_string()).or_insert(0);
+                *entry += 1;
+                if *entry > 1 {
+                    let extra = (*entry - 1) * 1500;
+                    max_extra_same_host = max_extra_same_host.max(extra);
                 }
             }
         }
@@ -215,7 +215,7 @@ impl Engine {
     /// log per-url latency. Read-only (no DB writes); only runs when
     /// `RSSEA_MEASURE_FEEDS` is set, so normal syncs pay no extra traffic.
     async fn log_per_feed_latency<'a>(&self, ids: impl Iterator<Item = &'a String>) {
-        let urls: Vec<String> = ids.map(|s| s.clone()).collect();
+        let urls: Vec<String> = ids.cloned().collect();
         if urls.is_empty() {
             return;
         }
@@ -249,7 +249,7 @@ impl Engine {
                 Err(e) => rows.push((format!("<join_err:{e}>"), 0, "join_err".to_string())),
             }
         }
-        rows.sort_by(|a, b| b.1.cmp(&a.1));
+        rows.sort_by_key(|a| std::cmp::Reverse(a.1));
         let total_ms = started.elapsed().as_millis();
         let slowest: Vec<String> = rows
             .iter()
@@ -263,7 +263,12 @@ impl Engine {
             "per-feed latency probe (slowest 10)",
         );
         for (url, ms, status) in rows.iter().skip(10) {
-            tracing::debug!(elapsed_ms = ms, status = status.as_str(), url = url.as_str(), "feed latency");
+            tracing::debug!(
+                elapsed_ms = ms,
+                status = status.as_str(),
+                url = url.as_str(),
+                "feed latency"
+            );
         }
     }
 
@@ -274,10 +279,11 @@ impl Engine {
         let lock_wait_ms = lock_started.elapsed().as_millis();
         let feed_id = FeedID::new(feed_id);
         let sync_started = std::time::Instant::now();
-        let count = self
+        let new_article_ids = self
             .nf
             .fetch_feed(&feed_id, &self.client, reqwest::header::HeaderMap::new())
             .await?;
+        let count = new_article_ids.len() as i64;
         let nf_sync_ms = sync_started.elapsed().as_millis();
         let clamp_started = std::time::Instant::now();
         self.clamp_future_article_dates().await?;
@@ -302,7 +308,7 @@ impl Engine {
     /// directly because news-flash exposes no API to sanitize stored dates. It
     /// pins upstream's private schema; an upstream migration may break it. No
     /// upstream change is planned; keep the table/column names in sync with
-    /// news-flash 3.2.0.
+    /// news-flash 4.0.1.
     async fn clamp_future_article_dates(&self) -> anyhow::Result<()> {
         let started = std::time::Instant::now();
         let db_path = self.data_dir.join("engine/data/database.sqlite");
@@ -344,7 +350,10 @@ impl Engine {
         let url = news_flash::models::Url::parse(url)?;
         let id = news_flash::models::FeedID::new(url.as_str());
         let semaphore = self.nf.get_semaphore();
-        let parsed = news_flash::feed_parser::download_and_parse_feed(
+        // A user-supplied URL may be a site rather than a feed, so discovery may
+        // return several candidates. `download_and_parse_feed` now only handles
+        // URLs that are already feeds.
+        let parsed = news_flash::feed_parser::discover_and_parse_feed(
             &url,
             &id,
             None,
@@ -353,26 +362,19 @@ impl Engine {
         )
         .await;
         match parsed {
-            Ok(news_flash::feed_parser::ParsedUrl::SingleFeed(feed)) => Ok(Discovered {
+            Ok(news_flash::DiscoverResult::SingleFeed(feed)) => Ok(Discovered {
                 title: Some(feed.label),
-                feed_url: feed.feed_url.map(|u| u.to_string()),
+                feed_url: feed.feed_url,
                 alternatives: Vec::new(),
             }),
-            Ok(news_flash::feed_parser::ParsedUrl::MultipleFeeds(feeds)) => {
+            Ok(news_flash::DiscoverResult::MultipleFeeds(feeds)) => {
                 let first = feeds.first();
                 Ok(Discovered {
                     title: first.map(|f| f.label.clone()),
-                    feed_url: first
-                        .and_then(|f| f.feed_url.clone())
-                        .map(|u| u.to_string()),
+                    feed_url: first.and_then(|f| f.feed_url.clone()),
                     alternatives: feeds
                         .into_iter()
-                        .map(|f| {
-                            (
-                                f.label,
-                                f.feed_url.map(|u| u.to_string()).unwrap_or_default(),
-                            )
-                        })
+                        .map(|f| (f.label, f.feed_url.unwrap_or_default()))
                         .collect(),
                 })
             }
@@ -401,7 +403,7 @@ impl Engine {
         // DELIBERATE PINNED-SCHEMA BYPASS: this writes feed_mapping directly because
         // news-flash exposes no public API to delete a single feed mapping. It pins
         // upstream's private schema; an upstream migration may break it. No upstream
-        // change is planned; keep the column names in sync with news-flash 3.2.0.
+        // change is planned; keep the column names in sync with news-flash 4.0.1.
         let db_path = self.data_dir.join("engine/data/database.sqlite");
         let id = id.to_string();
         let to_category = to_category.to_string();
@@ -452,13 +454,13 @@ impl Engine {
             feeds: Some(vec![id]),
             ..ArticleFilter::default()
         };
-        let ids = self.with_nf(move |nf| nf.get_article_ids(filter)).await?;
+        let ids = self.nf.get_article_ids(filter).await?;
         Ok(ids.into_iter().map(|a| a.as_str().to_string()).collect())
     }
 
     pub async fn get_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
-        let unread = self.with_nf(|nf| nf.unread_count_feed_map(false)).await?;
-        let (feeds, mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
+        let unread = self.nf.unread_count_feed_map(false).await?;
+        let (feeds, mappings) = self.nf.get_feeds().await?;
         Ok(Self::summaries_from_parts(feeds, mappings, &unread))
     }
 
@@ -503,9 +505,9 @@ impl Engine {
                 unread_count: unread.get(&feed.feed_id).copied().unwrap_or(0),
                 id,
                 title: feed.label,
-                website: feed.website.map(|u| u.to_string()),
-                feed_url: feed.feed_url.map(|u| u.to_string()),
-                icon_url: feed.icon_url.map(|u| u.to_string()),
+                website: feed.website,
+                feed_url: feed.feed_url,
+                icon_url: feed.icon_url,
                 error_count: feed.error_count,
                 error_message: feed.error_message,
             });
@@ -514,9 +516,9 @@ impl Engine {
     }
 
     pub async fn category_index(&self) -> anyhow::Result<CategoryIndex> {
-        let (categories, category_mappings) = self.with_nf(|nf| nf.get_categories()).await?;
-        let (feeds, feed_mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
-        let unread = self.with_nf(|nf| nf.unread_count_feed_map(false)).await?;
+        let (categories, category_mappings) = self.nf.get_categories().await?;
+        let (feeds, feed_mappings) = self.nf.get_feeds().await?;
+        let unread = self.nf.unread_count_feed_map(false).await?;
         let path_by_id =
             crate::engine::opml_import::category_paths(&categories, &category_mappings);
         let summaries = Self::summaries_from_parts(feeds.clone(), feed_mappings.clone(), &unread);
@@ -562,7 +564,7 @@ impl Engine {
         Vec<news_flash::models::Category>,
         Vec<news_flash::models::CategoryMapping>,
     )> {
-        self.with_nf(|nf| nf.get_categories()).await
+        Ok(self.nf.get_categories().await?)
     }
 
     pub async fn add_category(&self, name: &str, parent: Option<&str>) -> anyhow::Result<String> {
@@ -603,8 +605,8 @@ impl Engine {
         let _guard = self.mutation_guard().await;
         let mut deleted: Vec<String> = Vec::new();
         loop {
-            let (categories, category_mappings) = self.with_nf(|nf| nf.get_categories()).await?;
-            let (_, feed_mappings) = self.with_nf(|nf| nf.get_feeds()).await?;
+            let (categories, category_mappings) = self.nf.get_categories().await?;
+            let (_, feed_mappings) = self.nf.get_feeds().await?;
             let toplevel = NEWSFLASH_TOPLEVEL.as_str();
             let feed_cats: std::collections::HashSet<&str> = feed_mappings
                 .iter()
@@ -668,7 +670,7 @@ impl Engine {
             categories: Some(vec![id]),
             ..news_flash::models::ArticleFilter::default()
         };
-        let ids = self.with_nf(move |nf| nf.get_article_ids(filter)).await?;
+        let ids = self.nf.get_article_ids(filter).await?;
         Ok(ids.into_iter().map(|a| a.as_str().to_string()).collect())
     }
 
@@ -715,9 +717,8 @@ impl Engine {
     }
 
     pub async fn get_headlines(&self, filter: ArticleFilter) -> anyhow::Result<Vec<Headline>> {
-        let (articles, titles) = self
-            .with_nf(|nf| Ok((nf.get_fat_articles(filter)?, nf.get_feeds()?.0)))
-            .await?;
+        let articles = self.nf.get_fat_articles(filter).await?;
+        let (titles, _) = self.nf.get_feeds().await?;
         let title_by_feed: HashMap<String, String> = titles
             .into_iter()
             .map(|f| (f.feed_id.as_str().to_string(), f.label))
@@ -738,7 +739,7 @@ impl Engine {
                     title: a.title,
                     feed_id: feed_id.clone(),
                     feed_title: title_by_feed.get(&feed_id).cloned(),
-                    url: a.url.map(|u| u.to_string()),
+                    url: a.url,
                     date: a.date,
                     summary: a.summary,
                     thumbnail_url: a.thumbnail_url,
@@ -760,8 +761,8 @@ impl Engine {
             .map(|id| news_flash::models::ArticleID::new(&id))
             .collect::<Vec<_>>();
         let filter = news_flash::models::ArticleFilter {
-            order: Some(news_flash::models::ArticleOrder::NewestFirst),
-            order_by: Some(news_flash::models::OrderBy::Published),
+            order: news_flash::models::ArticleOrder::NewestFirst,
+            order_by: news_flash::models::OrderBy::Published,
             ids: Some(ids),
             ..news_flash::models::ArticleFilter::default()
         };
@@ -819,7 +820,7 @@ impl Engine {
 
     pub async fn get_article_detail(&self, article_id: &str) -> anyhow::Result<ArticleDetail> {
         let id = news_flash::models::ArticleID::new(article_id);
-        let a = self.with_nf(move |nf| nf.get_fat_article(&id)).await?;
+        let a = self.nf.get_fat_article(&id).await?;
         let feed_id = a.feed_id.as_str().to_string();
         let feed_title = self
             .get_feeds()
@@ -827,15 +828,20 @@ impl Engine {
             .into_iter()
             .find(|f| f.id == feed_id)
             .map(|f| f.title);
+        // Respect the per-article feed-vs-scraped preference instead of
+        // unconditionally preferring scraped_content.
+        let html = a.preferred_html().map(str::to_string);
         Ok(ArticleDetail {
             id: a.article_id.as_str().to_string(),
             title: a.title,
             author: a.author,
             feed_id,
             feed_title,
-            url: a.url.map(|u| u.to_string()),
+            url: a.url,
             date: a.date,
-            html: a.scraped_content.or(a.html),
+            // Respect the per-article feed-vs-scraped preference instead of
+            // unconditionally preferring scraped_content.
+            html,
             summary: a.summary,
             unread: a.unread == Read::Unread,
             marked: a.marked == Marked::Marked,
@@ -857,9 +863,7 @@ impl Engine {
 
     pub async fn get_favicon(&self, feed_id: &str) -> anyhow::Result<Option<(String, Vec<u8>)>> {
         let feed_id = FeedID::new(feed_id);
-        let icon = self
-            .with_nf(move |nf| nf.load_icon_from_db(&feed_id))
-            .await?;
+        let icon = self.nf.load_icon_from_db(&feed_id).await?;
         let data = icon.highres.or(icon.lowres);
         Ok(data.map(|bytes| {
             (
@@ -877,7 +881,7 @@ impl Engine {
         let _guard = self.mutation_guard().await;
         match self
             .nf
-            .get_article_thumbnail(&article_id, &self.client)
+            .get_article_thumbnail(&article_id, None, &self.client)
             .await?
         {
             Some(thumbnail) => {
@@ -998,7 +1002,7 @@ pub mod tests {
         let engine = Engine::new(&config).await.unwrap();
         assert!(dir.join("engine/config").exists());
         assert!(dir.join("engine/data").exists());
-        let empty = engine.with_nf(|nf| nf.is_database_empty()).await.unwrap();
+        let empty = engine.nf().is_database_empty().await.unwrap();
         assert!(empty);
     }
 
@@ -1021,12 +1025,11 @@ pub mod tests {
             .unwrap();
         assert_eq!(feed.title, "Test Feed");
         let article_count = engine
-            .with_nf(|nf| {
-                nf.get_article_ids(news_flash::models::ArticleFilter::default())
-                    .map(|v| v.len())
-            })
+            .nf()
+            .get_article_ids(news_flash::models::ArticleFilter::default())
             .await
-            .unwrap();
+            .unwrap()
+            .len();
         assert_eq!(article_count, 2);
         let counts = engine.sync_all().await.unwrap();
         assert_eq!(counts.get(&server.url).copied(), Some(0));
@@ -1058,8 +1061,8 @@ pub mod tests {
         assert_eq!(feeds[0].title, "Test Feed");
 
         let filter = news_flash::models::ArticleFilter {
-            order: Some(news_flash::models::ArticleOrder::NewestFirst),
-            order_by: Some(news_flash::models::OrderBy::Published),
+            order: news_flash::models::ArticleOrder::NewestFirst,
+            order_by: news_flash::models::OrderBy::Published,
             ..news_flash::models::ArticleFilter::default()
         };
         let headlines = engine.get_headlines(filter).await.unwrap();
@@ -1168,8 +1171,8 @@ pub mod tests {
         engine.sync_all().await.unwrap();
 
         let filter = news_flash::models::ArticleFilter {
-            order: Some(news_flash::models::ArticleOrder::NewestFirst),
-            order_by: Some(news_flash::models::OrderBy::Published),
+            order: news_flash::models::ArticleOrder::NewestFirst,
+            order_by: news_flash::models::OrderBy::Published,
             ..news_flash::models::ArticleFilter::default()
         };
         let headlines = engine.get_headlines(filter).await.unwrap();

@@ -109,7 +109,7 @@ mod tests {
 
         let after = engine.last_sync().await;
         assert!(after > before);
-        let unread = engine.with_nf(|nf| nf.unread_count_all()).await.unwrap();
+        let unread = engine.nf().unread_count_all().await.unwrap();
         assert_eq!(unread, 2);
         server.stop();
     }

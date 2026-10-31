@@ -119,7 +119,7 @@ async fn build_stats(state: &AppState) -> ApiResult<SettingsStats> {
     let feeds = state.engine.get_feeds().await?.len();
     let db_path = state.engine.data_dir().join("engine/data/database.sqlite");
     let articles = crate::engine::queries::total_article_count(&db_path)?;
-    let unread = state.engine.with_nf(|nf| nf.unread_count_all()).await?;
+    let unread = state.engine.nf().unread_count_all().await?;
     let database_size_bytes = state.engine.database_size_bytes().await?;
     let last_sync = state.engine.last_sync().await.to_rfc3339();
     Ok(SettingsStats {

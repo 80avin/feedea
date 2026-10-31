@@ -5,24 +5,27 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
-news-flash = { version = "3.2.0", default-features = false }
+news-flash = { version = "4.0.1", default-features = false, features = [
+  "sqlite-bundled",
+  "file-secret-store",
+] }
 axum = "0.8.9"
 tokio = { version = "1.53.1", features = ["full"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-rusqlite = { version = "0.40.2", features = ["bundled", "chrono"] }
+rusqlite = { version = "0.39.0", features = ["bundled", "chrono"] }
+sqlx = { version = "0.9", default-features = false }
 clap = { version = "4.6.6", features = ["derive", "env"] }
 url = "2.5.8"
 reqwest = "0.13.4"
-diesel = "2"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 chrono = "0.4"
 argon2 = { version = "0.6.0" }
 rand = "0.10.2"
 sha2 = "0.11.0"
-scraper = "0.27.0"
-html5ever = "0.39.0"
+scraper = "0.29.0"
+html5ever = "0.40.1"
 percent-encoding = "2.3.2"
 rust-embed = "8.12.0"
 mime_guess = "2.0.5"
